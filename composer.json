@@ -3,7 +3,7 @@
   "type": "project",
   "description": "Sistem Perpustakaan SMAN Bernas - hasil konversi dari React/Vite ke Laravel dengan tampilan tetap sama.",
   "require": {
-    "php": "^8.2",
+    "php": "^8.4",
     "ext-pdo_mysql": "*",
     "laravel/framework": "^11.0"
   },
