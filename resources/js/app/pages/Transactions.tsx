@@ -1,26 +1,20 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
-  Search,
-  Plus,
+  AlertTriangle,
   BookCopy,
-  User,
-  X,
   Calendar,
   Edit2,
-  Trash2,
-  AlertTriangle,
   Eye,
+  Plus,
+  Search,
+  Trash2,
+  User,
+  X,
 } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { Toast } from '../components/Toast';
 import { SuccessModal } from '../components/SuccessModal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import {
-  borrowingData as mockBorrowingData,
-  membersData as mockMembersData,
-  booksData as mockBooksData,
-  type Penalty,
-} from '../data/mockData';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -28,6 +22,21 @@ type LoanType = 'Harian' | 'Mingguan' | 'Tahunan' | 'Guru';
 type LoanSubType = 'Pribadi' | 'Kelas' | '';
 type BookCondition = 'Bagus' | 'Rusak' | 'Hilang';
 type PenaltyType = 'Buku Donasi' | 'Buku Pengganti';
+
+interface Penalty {
+  id: number;
+  borrowingId: number;
+  date: string;
+  memberId?: number;
+  memberName: string;
+  bookNumber: string;
+  bookTitle: string;
+  loanType: string;
+  reason: string;
+  penaltyType: string;
+  penaltyBookTitle: string;
+  notes?: string;
+}
 
 interface Member {
   id: number;
@@ -49,8 +58,12 @@ interface BorrowingItem {
   batchId: string;
   memberId?: number;
   memberName: string;
+  memberType?: string;
+  memberClassNip?: string;
+  bookCopyId?: number;
   bookTitle: string;
   bookNumber: string;
+  bookCategory?: string;
   borrowDate: string;
   dueDate: string;
   returnTime: string;
@@ -65,6 +78,7 @@ interface BatchItem {
   batchId: string;
   items: BorrowingItem[];
   memberName: string;
+  memberId?: number;
   loanType: LoanType;
   loanSubType: LoanSubType;
   className: string;
@@ -77,7 +91,7 @@ interface BatchItem {
 }
 
 interface TransactionsProps {
-  onAddPenalty: (record: Penalty) => void;
+  onAddPenalty?: (record: Penalty) => void;
   quickLoanType?: string | null;
   onQuickLoanConsumed?: () => void;
 }
@@ -92,61 +106,298 @@ const nowTime = () => {
   ).padStart(2, '0')}`;
 };
 
-const isLessonBook = (book: Book) => {
-  return book.category === 'Pelajaran' || book.category === 'Pendidikan';
+const addDays = (dateText: string, days: number) => {
+  const date = new Date(`${dateText}T00:00:00`);
+  date.setDate(date.getDate() + days);
+
+  return date.toISOString().split('T')[0];
 };
 
-const membersData: Member[] = mockMembersData.map((member: any) => ({
-  id: member.id,
-  name: member.name,
-  type: member.type,
-  classNip: member.classNip,
-}));
+const addYears = (dateText: string, years: number) => {
+  const date = new Date(`${dateText}T00:00:00`);
+  date.setFullYear(date.getFullYear() + years);
 
-const booksData: Book[] = mockBooksData.map((book: any) => ({
-  id: book.id,
-  number: book.number,
-  title: book.title,
-  category: book.category,
-  status: book.status,
-}));
+  return date.toISOString().split('T')[0];
+};
 
-const initialBorrowingData: BorrowingItem[] = mockBorrowingData
-  .filter((item: any) => item.status === 'Aktif' || item.status === 'Terlambat')
-  .map((item: any) => ({
-    id: item.id,
-    batchId: item.batchId ?? `BATCH-${item.id}`,
-    memberId: item.memberId,
-    memberName: item.memberName,
-    bookTitle: item.bookTitle,
-    bookNumber: item.bookNumber,
-    borrowDate: item.borrowDate,
-    dueDate: item.dueDate,
-    returnTime: item.returnTime || '',
-    status: item.status,
-    loanType: item.loanType ?? 'Mingguan',
-    loanSubType: item.loanSubType || '',
-    quantity: item.quantity || 1,
-    className: item.className || '',
-  }));
+const calculateReturnDate = (borrowDate: string, type: LoanType) => {
+  if (!borrowDate) {
+    return todayDate();
+  }
 
-const getInitialFormData = () => ({
-  borrowDate: todayDate(),
-  borrowTime: '',
-  returnDate: '',
-  returnTime: '',
-  borrowType: 'Harian' as LoanType,
-  loanSubType: 'Pribadi' as LoanSubType,
-  className: '',
-  quantity: 1,
-});
+  if (type === 'Harian') {
+    return borrowDate;
+  }
+
+  if (type === 'Mingguan') {
+    return addDays(borrowDate, 7);
+  }
+
+  if (type === 'Tahunan') {
+    return addYears(borrowDate, 1);
+  }
+
+  // Backend masih mewajibkan due_date untuk tipe Guru.
+  // Jadi dikirim +30 hari agar tidak terkena validasi 422.
+  return addDays(borrowDate, 30);
+};
+
+const isLessonBook = (book: Book) => {
+  return (
+    book.category === 'Pelajaran' ||
+    book.category === 'Pendidikan' ||
+    book.category?.toLowerCase().includes('pelajaran') ||
+    book.category?.toLowerCase().includes('pendidikan')
+  );
+};
+
+const getInitialFormData = () => {
+  const borrowDate = todayDate();
+  const borrowType: LoanType = 'Harian';
+
+  return {
+    borrowDate,
+    borrowTime: nowTime(),
+    returnDate: calculateReturnDate(borrowDate, borrowType),
+    returnTime: '17:00',
+    borrowType,
+    loanSubType: 'Pribadi' as LoanSubType,
+    className: '',
+    quantity: 1,
+  };
+};
+
+const extractArray = (payload: any): any[] => {
+  const data = payload?.data ?? payload;
+
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.borrowings)) return data.borrowings;
+  if (Array.isArray(data?.members)) return data.members;
+  if (Array.isArray(data?.books)) return data.books;
+  if (Array.isArray(data?.bookMasters)) return data.bookMasters;
+  if (Array.isArray(data?.book_masters)) return data.book_masters;
+  if (Array.isArray(data?.bookCopies)) return data.bookCopies;
+  if (Array.isArray(data?.book_copies)) return data.book_copies;
+
+  return [];
+};
+
+const getApiErrorMessage = async (response: Response, fallback: string) => {
+  const result = await response.json().catch(() => null);
+
+  return (
+    result?.message ||
+    result?.errors?.memberId?.[0] ||
+    result?.errors?.member_id?.[0] ||
+    result?.errors?.bookCopyId?.[0] ||
+    result?.errors?.book_copy_id?.[0] ||
+    result?.errors?.bookCopyIds?.[0] ||
+    result?.errors?.bookNumbers?.[0] ||
+    result?.errors?.borrowDate?.[0] ||
+    result?.errors?.borrow_date?.[0] ||
+    result?.errors?.dueDate?.[0] ||
+    result?.errors?.due_date?.[0] ||
+    result?.errors?.returnTime?.[0] ||
+    result?.errors?.return_time?.[0] ||
+    result?.errors?.loanType?.[0] ||
+    result?.errors?.loan_type?.[0] ||
+    result?.errors?.loanSubType?.[0] ||
+    result?.errors?.loan_sub_type?.[0] ||
+    result?.errors?.quantity?.[0] ||
+    result?.errors?.className?.[0] ||
+    result?.errors?.class_name?.[0] ||
+    result?.errors?.returnDate?.[0] ||
+    result?.errors?.return_date?.[0] ||
+    result?.errors?.reason?.[0] ||
+    result?.errors?.penaltyType?.[0] ||
+    result?.errors?.penalty_type?.[0] ||
+    result?.errors?.penaltyBookTitle?.[0] ||
+    result?.errors?.penalty_book_title?.[0] ||
+    result?.errors?.notes?.[0] ||
+    fallback
+  );
+};
+
+const apiGetArray = async (url: string) => {
+  const response = await fetch(url, {
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await getApiErrorMessage(response, `Gagal memuat ${url}`));
+  }
+
+  const result = await response.json();
+  return extractArray(result);
+};
+
+const normalizeMember = (item: any): Member => {
+  return {
+    id: Number(item.id),
+    name: item.name ?? '-',
+    type: item.type ?? 'Siswa',
+    classNip: String(
+      item.classNip ?? item.class_nip ?? item.nis ?? item.nip ?? '-'
+    ),
+  };
+};
+
+const normalizeBooks = (items: any[]): Book[] => {
+  const books: Book[] = [];
+
+  items.forEach((item) => {
+    const copies = item.copies ?? item.bookCopies ?? item.book_copies;
+
+    const masterTitle =
+      item.title ??
+      item.bookTitle ??
+      item.book_title ??
+      item.bookMaster?.title ??
+      item.book_master?.title ??
+      '-';
+
+    const masterCategory =
+      item.category ??
+      item.bookCategory ??
+      item.book_category ??
+      item.bookMaster?.category ??
+      item.book_master?.category ??
+      '-';
+
+    if (Array.isArray(copies)) {
+      copies.forEach((copy: any) => {
+        books.push({
+          id: Number(copy.id),
+          number: String(copy.number ?? copy.book_number ?? '-'),
+          title:
+            copy.title ??
+            copy.bookTitle ??
+            copy.book_title ??
+            copy.bookMaster?.title ??
+            copy.book_master?.title ??
+            masterTitle,
+          category:
+            copy.category ??
+            copy.bookCategory ??
+            copy.book_category ??
+            copy.bookMaster?.category ??
+            copy.book_master?.category ??
+            masterCategory,
+          status: copy.status ?? 'Tersedia',
+        });
+      });
+
+      return;
+    }
+
+    if (item.number || item.bookNumber || item.book_number) {
+      books.push({
+        id: Number(item.id),
+        number: String(item.number ?? item.bookNumber ?? item.book_number ?? '-'),
+        title: masterTitle,
+        category: masterCategory,
+        status: item.status ?? 'Tersedia',
+      });
+    }
+  });
+
+  return books.filter((book) => book.id && book.number !== '-');
+};
+
+const normalizeBorrowing = (item: any): BorrowingItem => {
+  const member = item.member ?? {};
+  const bookCopy = item.bookCopy ?? item.book_copy ?? {};
+  const bookMaster =
+    bookCopy.bookMaster ??
+    bookCopy.book_master ??
+    item.bookMaster ??
+    item.book_master ??
+    {};
+
+  return {
+    id: Number(item.id),
+    batchId: String(item.batchId ?? item.batch_id ?? `BATCH-${item.id}`),
+    memberId: item.memberId ?? item.member_id ?? member.id,
+    memberName:
+      item.memberName ??
+      item.member_name ??
+      member.name ??
+      '-',
+    memberType:
+      item.memberType ??
+      item.member_type ??
+      member.type ??
+      '-',
+    memberClassNip:
+      item.memberClassNip ??
+      item.member_class_nip ??
+      member.classNip ??
+      member.class_nip ??
+      member.nis ??
+      member.nip ??
+      '-',
+    bookCopyId:
+      item.bookCopyId ??
+      item.book_copy_id ??
+      bookCopy.id,
+    bookTitle:
+      item.bookTitle ??
+      item.book_title ??
+      bookCopy.title ??
+      bookCopy.bookTitle ??
+      bookCopy.book_title ??
+      bookMaster.title ??
+      '-',
+    bookNumber:
+      item.bookNumber ??
+      item.book_number ??
+      bookCopy.number ??
+      '-',
+    bookCategory:
+      item.bookCategory ??
+      item.book_category ??
+      bookCopy.category ??
+      bookMaster.category ??
+      '-',
+    borrowDate:
+      item.borrowDate ??
+      item.borrow_date ??
+      '-',
+    dueDate:
+      item.dueDate ??
+      item.due_date ??
+      '-',
+    returnTime:
+      item.returnTime ??
+      item.return_time ??
+      '',
+    status: item.status ?? 'Aktif',
+    loanType:
+      (item.loanType ??
+        item.loan_type ??
+        'Mingguan') as LoanType,
+    loanSubType:
+      (item.loanSubType ??
+        item.loan_sub_type ??
+        '') as LoanSubType,
+    quantity: Number(item.quantity ?? 1),
+    className: item.className ?? item.class_name ?? '',
+  };
+};
 
 export function Transactions({
   onAddPenalty,
   quickLoanType,
   onQuickLoanConsumed,
 }: TransactionsProps) {
-  const [borrowingData, setBorrowingData] = useState<BorrowingItem[]>(initialBorrowingData);
+  const [borrowingData, setBorrowingData] = useState<BorrowingItem[]>([]);
+  const [membersData, setMembersData] = useState<Member[]>([]);
+  const [booksData, setBooksData] = useState<Book[]>([]);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [loanTypeFilter, setLoanTypeFilter] = useState('Semua');
   const [currentPage, setCurrentPage] = useState(1);
@@ -161,18 +412,21 @@ export function Transactions({
   } | null>(null);
 
   const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [deleteDialog, setDeleteDialog] = useState<{
     isOpen: boolean;
     batchId: string | null;
-    bookTitle?: string;
     memberName?: string;
   }>({
     isOpen: false,
     batchId: null,
   });
 
-  const [selectedBatchForReturn, setSelectedBatchForReturn] = useState<BatchItem | null>(null);
+  const [selectedBatchForReturn, setSelectedBatchForReturn] =
+    useState<BatchItem | null>(null);
   const [bookCondition, setBookCondition] = useState<BookCondition>('Bagus');
   const [penaltyData, setPenaltyData] = useState({
     type: 'Buku Donasi' as PenaltyType,
@@ -191,34 +445,35 @@ export function Transactions({
     { id: string; search: string; selected: Book | null }[]
   >([{ id: '1', search: '', selected: null }]);
 
-  const [showBookDropdownId, setShowBookDropdownId] = useState<string | null>(null);
+  const [showBookDropdownId, setShowBookDropdownId] = useState<string | null>(
+    null
+  );
   const [formData, setFormData] = useState(getInitialFormData());
 
-  const calculateReturnDate = (borrowDate: string, type: string) => {
-    if (type === 'Harian') {
-      return borrowDate;
+  const loadData = async () => {
+    setIsLoading(true);
+    setErrorMsg('');
+
+    try {
+      const [borrowings, members, books] = await Promise.all([
+        apiGetArray('/api/borrowings/active'),
+        apiGetArray('/api/members'),
+        apiGetArray('/api/books'),
+      ]);
+
+      setBorrowingData(borrowings.map(normalizeBorrowing));
+      setMembersData(members.map(normalizeMember));
+      setBooksData(normalizeBooks(books));
+    } catch (error: any) {
+      setErrorMsg(error.message || 'Gagal memuat data transaksi.');
+    } finally {
+      setIsLoading(false);
     }
-
-    if (type === 'Guru') {
-      return '';
-    }
-
-    const date = new Date(`${borrowDate}T00:00:00`);
-
-    if (type === 'Mingguan') {
-      date.setDate(date.getDate() + 7);
-    }
-
-    if (type === 'Tahunan') {
-      date.setFullYear(date.getFullYear() + 1);
-    }
-
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-
-    return `${year}-${month}-${day}`;
   };
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const groupedBorrowing = useMemo(() => {
     return borrowingData.reduce((acc, item) => {
@@ -237,6 +492,7 @@ export function Transactions({
       batchId,
       items,
       memberName: items[0].memberName,
+      memberId: items[0].memberId,
       loanType: items[0].loanType,
       loanSubType: items[0].loanSubType,
       className: items[0].className,
@@ -244,7 +500,9 @@ export function Transactions({
       borrowDate: items[0].borrowDate,
       dueDate: items[0].dueDate,
       returnTime: items[0].returnTime,
-      status: items.some((item) => item.status === 'Terlambat') ? 'Terlambat' : items[0].status,
+      status: items.some((item) => item.status === 'Terlambat')
+        ? 'Terlambat'
+        : items[0].status,
       bookCount: items.length,
     }));
   }, [groupedBorrowing]);
@@ -256,8 +514,12 @@ export function Transactions({
 
         const matchesSearch =
           batch.memberName.toLowerCase().includes(lowerSearch) ||
-          batch.items.some((item) => item.bookTitle.toLowerCase().includes(lowerSearch)) ||
-          batch.items.some((item) => item.bookNumber.toLowerCase().includes(lowerSearch));
+          batch.items.some((item) =>
+            item.bookTitle.toLowerCase().includes(lowerSearch)
+          ) ||
+          batch.items.some((item) =>
+            item.bookNumber.toLowerCase().includes(lowerSearch)
+          );
 
         const matchesLoanType =
           loanTypeFilter === 'Semua' || batch.loanType === loanTypeFilter;
@@ -267,10 +529,8 @@ export function Transactions({
       .sort((a, b) => {
         if (a.status === 'Terlambat' && b.status !== 'Terlambat') return -1;
         if (a.status !== 'Terlambat' && b.status === 'Terlambat') return 1;
-        if (!a.dueDate) return 1;
-        if (!b.dueDate) return -1;
 
-        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+        return b.batchId.localeCompare(a.batchId);
       });
   }, [allBatches, searchTerm, loanTypeFilter]);
 
@@ -297,33 +557,55 @@ export function Transactions({
     setCurrentPage(1);
   }, [searchTerm, loanTypeFilter]);
 
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+
+    if (totalPages === 0 && currentPage !== 1) {
+      setCurrentPage(1);
+    }
+  }, [totalPages, currentPage]);
+
   const detailBatch = useMemo(() => {
     return allBatches.find((batch) => batch.batchId === detailBatchId) ?? null;
   }, [allBatches, detailBatchId]);
 
   const filteredMembersForModal = membersData.filter((member) => {
+    const keyword = memberSearch.toLowerCase();
+
     return (
-      member.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
-      member.classNip.toLowerCase().includes(memberSearch.toLowerCase())
+      member.name.toLowerCase().includes(keyword) ||
+      member.classNip.toLowerCase().includes(keyword)
     );
   });
 
   const getFilteredBooksForInput = (searchText: string) => {
+    const selectedIds = bookInputs
+      .filter((input) => input.selected)
+      .map((input) => input.selected!.id);
+
     return booksData.filter((book) => {
+      const keyword = searchText.toLowerCase();
+
       return (
         book.status === 'Tersedia' &&
-        (book.title.toLowerCase().includes(searchText.toLowerCase()) ||
-          book.number.toLowerCase().includes(searchText.toLowerCase()))
+        !selectedIds.includes(book.id) &&
+        (book.title.toLowerCase().includes(keyword) ||
+          book.number.toLowerCase().includes(keyword))
       );
     });
   };
 
-  const getActiveBorrowingsByType = (memberName: string, loanType: string) => {
+  const getActiveBorrowingsByType = (
+    memberId: number | undefined,
+    loanType: string
+  ) => {
     return borrowingData.filter((item) => {
       return (
-        item.memberName === memberName &&
+        item.memberId === memberId &&
         item.loanType === loanType &&
-        item.status === 'Aktif'
+        (item.status === 'Aktif' || item.status === 'Terlambat')
       );
     });
   };
@@ -384,7 +666,7 @@ export function Transactions({
   };
 
   const handleBookSelect = (inputId: string, book: Book) => {
-    updateBookInput(inputId, book.title, book);
+    updateBookInput(inputId, `${book.title} (${book.number})`, book);
     setShowBookDropdownId(null);
   };
 
@@ -499,18 +781,40 @@ export function Transactions({
 
     if (formData.borrowType === 'Mingguan') {
       if (selectedBooks.length > 2) {
-        setToast({ message: 'Peminjaman mingguan maksimal 2 buku!', type: 'error' });
+        setToast({
+          message: 'Peminjaman mingguan maksimal 2 buku!',
+          type: 'error',
+        });
         return false;
       }
 
       const activeMingguan = getActiveBorrowingsByType(
-        selectedMember.name,
+        selectedMember.id,
         'Mingguan'
       );
 
-      if (!editMode && activeMingguan.length + selectedBooks.length > 2) {
+      const currentlyEditedCount =
+        editMode && editingBatchId
+          ? borrowingData.filter((item) => item.batchId === editingBatchId).length
+          : 0;
+
+      if (
+        !editMode &&
+        activeMingguan.length + selectedBooks.length > 2
+      ) {
         setToast({
           message: `${selectedMember.name} sudah meminjam ${activeMingguan.length} buku mingguan. Maksimal 2 buku aktif!`,
+          type: 'error',
+        });
+        return false;
+      }
+
+      if (
+        editMode &&
+        activeMingguan.length - currentlyEditedCount + selectedBooks.length > 2
+      ) {
+        setToast({
+          message: `Peminjaman mingguan maksimal 2 buku aktif.`,
           type: 'error',
         });
         return false;
@@ -519,7 +823,8 @@ export function Transactions({
       const lessonBooks = selectedBooks.filter((book) => isLessonBook(book));
       if (lessonBooks.length > 0) {
         setToast({
-          message: 'Peminjaman mingguan tidak bisa untuk buku Pelajaran/Pendidikan. Gunakan tipe Tahunan.',
+          message:
+            'Peminjaman mingguan tidak bisa untuk buku Pelajaran/Pendidikan. Gunakan tipe Tahunan.',
           type: 'error',
         });
         return false;
@@ -529,7 +834,84 @@ export function Transactions({
     return true;
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const createBorrowing = async (selectedBooks: Book[]) => {
+    if (!selectedMember) return;
+
+    const payload = {
+      member_id: selectedMember.id,
+      bookCopyIds: selectedBooks.map((book) => book.id),
+      borrow_date: formData.borrowDate,
+      due_date: formData.returnDate,
+      return_time: formData.returnTime || null,
+      loan_type: formData.borrowType,
+      loan_sub_type: formData.loanSubType || null,
+      quantity:
+        formData.borrowType === 'Harian' && formData.loanSubType === 'Kelas'
+          ? formData.quantity
+          : 1,
+      class_name:
+        formData.borrowType === 'Harian' && formData.loanSubType === 'Kelas'
+          ? formData.className
+          : null,
+    };
+
+    const response = await fetch('/api/borrowings', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        await getApiErrorMessage(response, 'Gagal menyimpan peminjaman.')
+      );
+    }
+  };
+
+  const updateBorrowingBatch = async (batch: BatchItem) => {
+    if (!selectedMember) return;
+
+    await Promise.all(
+      batch.items.map(async (item) => {
+        const response = await fetch(`/api/borrowings/${item.id}`, {
+          method: 'PUT',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            member_id: selectedMember.id,
+            borrow_date: formData.borrowDate,
+            due_date: formData.returnDate,
+            return_time: formData.returnTime || null,
+            loan_type: formData.borrowType,
+            loan_sub_type: formData.loanSubType || null,
+            quantity:
+              formData.borrowType === 'Harian' &&
+              formData.loanSubType === 'Kelas'
+                ? formData.quantity
+                : 1,
+            class_name:
+              formData.borrowType === 'Harian' &&
+              formData.loanSubType === 'Kelas'
+                ? formData.className
+                : null,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(
+            await getApiErrorMessage(response, 'Gagal memperbarui peminjaman.')
+          );
+        }
+      })
+    );
+  };
+
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
 
     const selectedBooks = bookInputs
@@ -540,92 +922,67 @@ export function Transactions({
       return;
     }
 
-    const batchId = editMode && editingBatchId ? editingBatchId : `BATCH${Date.now()}`;
+    setIsSaving(true);
 
-    let newBorrowings: BorrowingItem[] = [];
+    try {
+      if (editMode && editingBatchId) {
+        const batch = allBatches.find((item) => item.batchId === editingBatchId);
 
-    if (formData.borrowType === 'Harian' && formData.loanSubType === 'Kelas') {
-      const book = selectedBooks[0];
+        if (!batch) {
+          throw new Error('Data batch tidak ditemukan.');
+        }
 
-      newBorrowings = [
-        {
-          id: Date.now(),
-          batchId,
-          memberId: selectedMember.id,
-          memberName: selectedMember.name,
-          bookTitle: book.title,
-          bookNumber: `${book.number}-${formData.quantity}`,
-          borrowDate: formData.borrowDate,
-          dueDate: formData.returnDate,
-          returnTime: formData.returnTime,
-          status: 'Aktif',
-          loanType: formData.borrowType,
-          loanSubType: formData.loanSubType,
-          className: formData.className,
-          quantity: formData.quantity,
-        },
-      ];
-    } else {
-      newBorrowings = selectedBooks.map((book, index) => ({
-        id: Date.now() + index,
-        batchId,
-        memberId: selectedMember.id,
-        memberName: selectedMember.name,
-        bookTitle: book.title,
-        bookNumber: book.number,
-        borrowDate: formData.borrowDate,
-        dueDate: formData.returnDate,
-        returnTime: formData.returnTime,
-        status: 'Aktif',
-        loanType: formData.borrowType,
-        loanSubType: formData.loanSubType,
-        className: formData.loanSubType === 'Kelas' ? formData.className : '',
-        quantity: 1,
-      }));
+        await updateBorrowingBatch(batch);
+        setSuccessMsg('Peminjaman berhasil diperbarui!');
+      } else {
+        await createBorrowing(selectedBooks);
+        setSuccessMsg(
+          `Peminjaman berhasil dibuat untuk ${selectedMember.name} (${selectedBooks.length} buku)!`
+        );
+      }
+
+      handleReset();
+      setShowModal(false);
+      await loadData();
+    } catch (error: any) {
+      setToast({
+        message: error.message || 'Gagal menyimpan transaksi.',
+        type: 'error',
+      });
+    } finally {
+      setIsSaving(false);
     }
-
-    if (editMode && editingBatchId) {
-      setBorrowingData((previous) => [
-        ...previous.filter((item) => item.batchId !== editingBatchId),
-        ...newBorrowings,
-      ]);
-      setSuccessMsg('Peminjaman berhasil diperbarui!');
-    } else {
-      setBorrowingData((previous) => [...previous, ...newBorrowings]);
-      setSuccessMsg(
-        `Peminjaman berhasil dibuat untuk ${selectedMember.name} (${selectedBooks.length} buku)!`
-      );
-    }
-
-    handleReset();
-    setShowModal(false);
   };
 
   const handleEdit = (batch: BatchItem) => {
-    const member = membersData.find((item) => item.name === batch.memberName);
+    const member = membersData.find((item) => item.id === batch.memberId);
 
     if (!member) {
       setToast({ message: 'Data anggota tidak ditemukan.', type: 'error' });
       return;
     }
 
-    const inputs = batch.items.map((item) => {
-      const book = booksData.find((data) => data.number === item.bookNumber.split('-')[0]);
-
-      return {
-        id: String(item.id),
-        search: book?.title ?? item.bookTitle,
-        selected: book ?? null,
-      };
-    });
+    const inputs = batch.items.map((item) => ({
+      id: String(item.id),
+      search: `${item.bookTitle} (${item.bookNumber})`,
+      selected: {
+        id: Number(item.bookCopyId ?? item.id),
+        number: item.bookNumber,
+        title: item.bookTitle,
+        category: item.bookCategory ?? '',
+        status: 'Tersedia',
+      },
+    }));
 
     setSelectedMember(member);
     setMemberSearch(member.name);
-    setBookInputs(inputs.length > 0 ? inputs : [{ id: '1', search: '', selected: null }]);
+    setBookInputs(
+      inputs.length > 0 ? inputs : [{ id: '1', search: '', selected: null }]
+    );
 
     setFormData({
       borrowDate: batch.borrowDate,
-      borrowTime: batch.loanType === 'Harian' ? batch.items[0].returnTime : '',
+      borrowTime: batch.loanType === 'Harian' ? nowTime() : '',
       returnDate: batch.dueDate,
       returnTime: batch.returnTime,
       borrowType: batch.loanType,
@@ -643,22 +1000,53 @@ export function Transactions({
     setDeleteDialog({
       isOpen: true,
       batchId: batch.batchId,
-      bookTitle: batch.items[0].bookTitle,
       memberName: batch.memberName,
     });
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteDialog.batchId) {
       return;
     }
 
-    setBorrowingData((previous) =>
-      previous.filter((item) => item.batchId !== deleteDialog.batchId)
-    );
+    const batch = allBatches.find((item) => item.batchId === deleteDialog.batchId);
 
-    setSuccessMsg('Peminjaman berhasil dihapus!');
-    setDeleteDialog({ isOpen: false, batchId: null });
+    if (!batch) {
+      setDeleteDialog({ isOpen: false, batchId: null });
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      await Promise.all(
+        batch.items.map(async (item) => {
+          const response = await fetch(`/api/borrowings/${item.id}`, {
+            method: 'DELETE',
+            headers: {
+              Accept: 'application/json',
+            },
+          });
+
+          if (!response.ok) {
+            throw new Error(
+              await getApiErrorMessage(response, 'Gagal menghapus peminjaman.')
+            );
+          }
+        })
+      );
+
+      setSuccessMsg('Peminjaman berhasil dihapus!');
+      setDeleteDialog({ isOpen: false, batchId: null });
+      await loadData();
+    } catch (error: any) {
+      setToast({
+        message: error.message || 'Gagal menghapus transaksi.',
+        type: 'error',
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleReturn = (batch: BatchItem) => {
@@ -672,7 +1060,7 @@ export function Transactions({
     setReturnModal(true);
   };
 
-  const handleReturnSubmit = (event: React.FormEvent) => {
+  const handleReturnSubmit = async (event: FormEvent) => {
     event.preventDefault();
 
     if (!selectedBatchForReturn) {
@@ -688,37 +1076,70 @@ export function Transactions({
       return;
     }
 
-    if (needsPenalty) {
-      selectedBatchForReturn.items.forEach((item) => {
-        onAddPenalty({
-          id: Date.now() + item.id,
-          borrowingId: item.id,
-          date: todayDate(),
-          memberId: item.memberId,
-          memberName: item.memberName,
-          bookNumber: item.bookNumber,
-          bookTitle: item.bookTitle,
-          loanType: item.loanType,
-          reason: isLate ? 'Terlambat' : bookCondition,
-          penaltyType: penaltyData.type,
-          penaltyBookTitle: penaltyData.bookTitle,
-          notes: penaltyData.notes,
-        });
+    setIsSaving(true);
+
+    try {
+      await Promise.all(
+        selectedBatchForReturn.items.map(async (item) => {
+          const response = await fetch(`/api/borrowings/${item.id}/return`, {
+            method: 'POST',
+            headers: {
+              Accept: 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              return_date: todayDate(),
+              return_time: nowTime(),
+              withPenalty: needsPenalty,
+              reason: needsPenalty ? (isLate ? 'Terlambat' : bookCondition) : null,
+              penalty_type: needsPenalty ? penaltyData.type : null,
+              penalty_book_title: needsPenalty ? penaltyData.bookTitle : null,
+              notes: penaltyData.notes || null,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(
+              await getApiErrorMessage(response, 'Gagal memproses pengembalian.')
+            );
+          }
+
+          if (needsPenalty && onAddPenalty) {
+            onAddPenalty({
+              id: Date.now() + item.id,
+              borrowingId: item.id,
+              date: todayDate(),
+              memberId: item.memberId,
+              memberName: item.memberName,
+              bookNumber: item.bookNumber,
+              bookTitle: item.bookTitle,
+              loanType: item.loanType,
+              reason: isLate ? 'Terlambat' : bookCondition,
+              penaltyType: penaltyData.type,
+              penaltyBookTitle: penaltyData.bookTitle,
+              notes: penaltyData.notes,
+            });
+          }
+        })
+      );
+
+      setSuccessMsg(
+        needsPenalty
+          ? `Pengembalian berhasil! Sanksi: ${penaltyData.type} (${penaltyData.bookTitle})`
+          : 'Buku berhasil dikembalikan dalam kondisi baik!'
+      );
+
+      setReturnModal(false);
+      setSelectedBatchForReturn(null);
+      await loadData();
+    } catch (error: any) {
+      setToast({
+        message: error.message || 'Gagal memproses pengembalian.',
+        type: 'error',
       });
+    } finally {
+      setIsSaving(false);
     }
-
-    setBorrowingData((previous) =>
-      previous.filter((item) => item.batchId !== selectedBatchForReturn.batchId)
-    );
-
-    setSuccessMsg(
-      needsPenalty
-        ? `Pengembalian berhasil! Sanksi: ${penaltyData.type} (${penaltyData.bookTitle})`
-        : 'Buku berhasil dikembalikan dalam kondisi baik!'
-    );
-
-    setReturnModal(false);
-    setSelectedBatchForReturn(null);
   };
 
   const goToPreviousPage = () => {
@@ -752,13 +1173,16 @@ export function Transactions({
           <button
             key={book.id}
             type="button"
+            onMouseDown={(event) => event.preventDefault()}
             onClick={() => handleBookSelect(input.id, book)}
             className="w-full px-4 py-3 text-left hover:bg-accent transition-colors border-b border-border last:border-0"
           >
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="font-medium text-foreground">{book.title}</p>
-                <p className="text-sm text-muted-foreground font-mono">{book.number}</p>
+                <p className="text-sm text-muted-foreground font-mono">
+                  {book.number}
+                </p>
               </div>
               <span className="px-2 py-1 rounded text-xs font-medium bg-secondary text-secondary-foreground">
                 {book.category}
@@ -788,7 +1212,9 @@ export function Transactions({
             <p className="text-sm font-semibold text-foreground">
               {input.selected.title}
             </p>
-            <p className="text-xs text-muted-foreground">{input.selected.category}</p>
+            <p className="text-xs text-muted-foreground">
+              {input.selected.category}
+            </p>
           </div>
         </div>
 
@@ -830,15 +1256,23 @@ export function Transactions({
                 className="w-full px-4 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 placeholder="Cari judul atau nomor buku..."
                 required
+                disabled={editMode}
               />
 
               {renderBookDropdown(input, filter)}
             </div>
 
-            {renderSelectedBook(input)}
+            {renderSelectedBook(input, true)}
+
+            {editMode && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Saat edit, data buku tidak diubah. Yang diubah hanya anggota,
+                tanggal, jenis peminjaman, kelas, dan jumlah.
+              </p>
+            )}
           </div>
 
-          {bookInputs.length > 1 && (
+          {bookInputs.length > 1 && !editMode && (
             <button
               type="button"
               onClick={() => removeBookInput(input.id)}
@@ -854,10 +1288,11 @@ export function Transactions({
   };
 
   const selectedBookCount = bookInputs.filter((input) => input.selected).length;
+  const isTahunanOrGuru = formData.borrowType === 'Tahunan' || formData.borrowType === 'Guru';
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-foreground mb-2">
             Peminjaman Buku
@@ -869,12 +1304,19 @@ export function Transactions({
 
         <button
           onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg font-medium transition-all shadow-sm hover:shadow-md"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg font-medium transition-all shadow-sm hover:shadow-md"
         >
           <Plus className="w-5 h-5" />
           Peminjaman Baru
         </button>
       </div>
+
+      {errorMsg && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <AlertTriangle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-xl p-6 shadow-sm border border-border">
@@ -885,7 +1327,7 @@ export function Transactions({
           <p className="text-3xl font-semibold text-foreground">
             {borrowingData.length}
           </p>
-          <p className="text-sm text-muted-foreground mt-1">Total saat ini</p>
+          <p className="text-sm text-muted-foreground mt-1">Total buku aktif</p>
         </div>
 
         <div className="bg-white rounded-xl p-6 shadow-sm border border-border">
@@ -911,7 +1353,7 @@ export function Transactions({
         </div>
       </div>
 
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-border">
+      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-border">
         <h3 className="font-semibold text-foreground mb-4">
           Daftar Peminjaman Aktif
         </h3>
@@ -931,7 +1373,7 @@ export function Transactions({
           <select
             value={loanTypeFilter}
             onChange={(event) => setLoanTypeFilter(event.target.value)}
-            className="px-4 py-3 bg-accent/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium min-w-[180px]"
+            className="w-full md:w-auto px-4 py-3 bg-accent/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium md:min-w-[180px]"
           >
             <option value="Semua">Semua Jenis</option>
             <option value="Harian">Harian</option>
@@ -942,7 +1384,7 @@ export function Transactions({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[950px]">
             <thead>
               <tr className="border-b-2 border-border">
                 <th className="text-left py-4 px-4 text-sm font-semibold text-foreground">
@@ -972,8 +1414,13 @@ export function Transactions({
             <tbody>
               {paginatedBatches.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-muted-foreground">
-                    {searchTerm || loanTypeFilter !== 'Semua'
+                  <td
+                    colSpan={7}
+                    className="py-12 text-center text-muted-foreground"
+                  >
+                    {isLoading
+                      ? 'Memuat data peminjaman...'
+                      : searchTerm || loanTypeFilter !== 'Semua'
                       ? 'Tidak ada hasil pencarian'
                       : 'Belum ada peminjaman aktif'}
                   </td>
@@ -1001,7 +1448,8 @@ export function Transactions({
                   </td>
 
                   <td className="py-4 px-4">
-                    {batch.loanType === 'Harian' && batch.loanSubType === 'Kelas' ? (
+                    {batch.loanType === 'Harian' &&
+                    batch.loanSubType === 'Kelas' ? (
                       <div className="flex items-center gap-2">
                         <BookCopy className="w-4 h-4 text-primary" />
                         <div>
@@ -1028,15 +1476,17 @@ export function Transactions({
                   </td>
 
                   <td className="py-4 px-4">
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      batch.loanType === 'Harian'
-                        ? 'bg-[#fff3cc] text-[#9d7a2f]'
-                        : batch.loanType === 'Mingguan'
-                        ? 'bg-[#e8f3ff] text-[#5a7ba0]'
-                        : batch.loanType === 'Tahunan'
-                        ? 'bg-[#f5c842]/20 text-[#9d7a2f]'
-                        : 'bg-[#d4f1e3] text-[#2d8659]'
-                    }`}>
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        batch.loanType === 'Harian'
+                          ? 'bg-[#fff3cc] text-[#9d7a2f]'
+                          : batch.loanType === 'Mingguan'
+                          ? 'bg-[#e8f3ff] text-[#5a7ba0]'
+                          : batch.loanType === 'Tahunan'
+                          ? 'bg-[#f5c842]/20 text-[#9d7a2f]'
+                          : 'bg-[#d4f1e3] text-[#2d8659]'
+                      }`}
+                    >
                       {batch.loanType}
                     </span>
                   </td>
@@ -1046,15 +1496,17 @@ export function Transactions({
                   </td>
 
                   <td className="py-4 px-4 text-muted-foreground">
-                    {batch.loanType === 'Guru' ? '-' : batch.dueDate}
+                    {batch.loanType === 'Guru' ? '-' : batch.dueDate || '-'}
                   </td>
 
                   <td className="py-4 px-4">
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      batch.status === 'Aktif'
-                        ? 'bg-[#e8f3ff] text-[#5a7ba0]'
-                        : 'bg-red-100 text-red-700'
-                    }`}>
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        batch.status === 'Aktif'
+                          ? 'bg-[#e8f3ff] text-[#5a7ba0]'
+                          : 'bg-red-100 text-red-700'
+                      }`}
+                    >
                       {batch.status}
                     </span>
                   </td>
@@ -1107,7 +1559,7 @@ export function Transactions({
           </p>
 
           {totalPages > 1 && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
               <button
                 onClick={goToPreviousPage}
                 disabled={currentPage === 1}
@@ -1166,7 +1618,7 @@ export function Transactions({
               Jenis Peminjaman
             </label>
 
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {(['Harian', 'Mingguan', 'Tahunan', 'Guru'] as LoanType[]).map(
                 (type) => (
                   <button
@@ -1225,7 +1677,8 @@ export function Transactions({
           <div>
             <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
               <User className="w-5 h-5 text-primary" />
-              {formData.borrowType === 'Harian' && formData.loanSubType === 'Kelas'
+              {formData.borrowType === 'Harian' &&
+              formData.loanSubType === 'Kelas'
                 ? 'Data Perwakilan'
                 : 'Data Anggota'}
             </h3>
@@ -1244,14 +1697,15 @@ export function Transactions({
                     onChange={(event) => {
                       setMemberSearch(event.target.value);
                       setShowMemberDropdown(true);
+                      setSelectedMember(null);
                     }}
                     onFocus={() => setShowMemberDropdown(true)}
-                    className="w-full pl-11 pr-4 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    className="w-full pl-11 pr-10 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     placeholder="Ketik nama atau kelas/NIP anggota..."
                     required
                   />
 
-                  {selectedMember && (
+                  {memberSearch && (
                     <button
                       type="button"
                       onClick={() => {
@@ -1273,6 +1727,7 @@ export function Transactions({
                         <button
                           key={member.id}
                           type="button"
+                          onMouseDown={(event) => event.preventDefault()}
                           onClick={() => handleMemberSelect(member)}
                           className="w-full px-4 py-3 text-left hover:bg-accent transition-colors border-b border-border last:border-0"
                         >
@@ -1286,11 +1741,13 @@ export function Transactions({
                               </p>
                             </div>
 
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                              member.type === 'Guru'
-                                ? 'bg-[#fff3cc] text-[#9d7a2f]'
-                                : 'bg-[#e8f3ff] text-[#5a7ba0]'
-                            }`}>
+                            <span
+                              className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                member.type === 'Guru'
+                                  ? 'bg-[#fff3cc] text-[#9d7a2f]'
+                                  : 'bg-[#e8f3ff] text-[#5a7ba0]'
+                              }`}
+                            >
                               {member.type}
                             </span>
                           </div>
@@ -1301,9 +1758,11 @@ export function Transactions({
               </div>
 
               {selectedMember && (
-                <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">No Anggota</p>
+                    <p className="text-sm text-muted-foreground mb-1">
+                      No Anggota
+                    </p>
                     <p className="font-medium text-foreground">
                       #{selectedMember.id.toString().padStart(4, '0')}
                     </p>
@@ -1322,11 +1781,13 @@ export function Transactions({
                     <p className="text-sm text-muted-foreground mb-1">
                       Jenis Anggota
                     </p>
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                      selectedMember.type === 'Guru'
-                        ? 'bg-[#fff3cc] text-[#9d7a2f]'
-                        : 'bg-[#e8f3ff] text-[#5a7ba0]'
-                    }`}>
+                    <span
+                      className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
+                        selectedMember.type === 'Guru'
+                          ? 'bg-[#fff3cc] text-[#9d7a2f]'
+                          : 'bg-[#e8f3ff] text-[#5a7ba0]'
+                      }`}
+                    >
                       {selectedMember.type}
                     </span>
                   </div>
@@ -1343,18 +1804,26 @@ export function Transactions({
               )}
 
               {selectedMember && formData.borrowType === 'Mingguan' && (
-                <div className={`mt-3 p-4 rounded-lg border-2 ${
-                  getActiveBorrowingsByType(selectedMember.name, 'Mingguan').length >= 2
-                    ? 'bg-red-50 border-red-300'
-                    : getActiveBorrowingsByType(selectedMember.name, 'Mingguan').length === 1
-                    ? 'bg-yellow-50 border-yellow-300'
-                    : 'bg-green-50 border-green-300'
-                }`}>
+                <div
+                  className={`mt-3 p-4 rounded-lg border-2 ${
+                    getActiveBorrowingsByType(selectedMember.id, 'Mingguan')
+                      .length >= 2
+                      ? 'bg-red-50 border-red-300'
+                      : getActiveBorrowingsByType(selectedMember.id, 'Mingguan')
+                          .length === 1
+                      ? 'bg-yellow-50 border-yellow-300'
+                      : 'bg-green-50 border-green-300'
+                  }`}
+                >
                   <p className="text-sm font-semibold mb-1">
                     Status Peminjaman Mingguan
                   </p>
                   <p className="text-sm">
-                    {getActiveBorrowingsByType(selectedMember.name, 'Mingguan').length} / 2 buku sedang aktif
+                    {
+                      getActiveBorrowingsByType(selectedMember.id, 'Mingguan')
+                        .length
+                    }{' '}
+                    / 2 buku sedang aktif
                   </p>
                 </div>
               )}
@@ -1367,55 +1836,29 @@ export function Transactions({
               Data Buku
             </h3>
 
-            {formData.borrowType === 'Harian' && formData.loanSubType === 'Pribadi' && (
-              <div className="space-y-3">
-                <div className="bg-[#fff3cc]/20 p-3 rounded-lg border border-[#f5c842]/30">
-                  <p className="text-sm text-[#9d7a2f]">
-                    ℹ️ Peminjaman harian pribadi maksimal 1 buku.
-                  </p>
-                </div>
-
-                <div className="bg-muted/30 p-4 rounded-lg border border-border">
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Pilih Buku
-                  </label>
-
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={bookInputs[0]?.search || ''}
-                      onChange={(event) => {
-                        updateBookInput(
-                          bookInputs[0]?.id || '1',
-                          event.target.value,
-                          null
-                        );
-                        setShowBookDropdownId(bookInputs[0]?.id || '1');
-                      }}
-                      onFocus={() => setShowBookDropdownId(bookInputs[0]?.id || '1')}
-                      className="w-full px-4 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      placeholder="Cari judul atau nomor buku..."
-                      required
-                    />
-
-                    {renderBookDropdown(bookInputs[0])}
+            {formData.borrowType === 'Harian' &&
+              formData.loanSubType === 'Pribadi' && (
+                <div className="space-y-3">
+                  <div className="bg-[#fff3cc]/20 p-3 rounded-lg border border-[#f5c842]/30">
+                    <p className="text-sm text-[#9d7a2f]">
+                      ℹ️ Peminjaman harian pribadi maksimal 1 buku.
+                    </p>
                   </div>
 
-                  {renderSelectedBook(bookInputs[0])}
+                  {renderBookInput(bookInputs[0], 0)}
                 </div>
-              </div>
-            )}
+              )}
 
-            {formData.borrowType === 'Harian' && formData.loanSubType === 'Kelas' && (
-              <div className="space-y-3">
-                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-                  <p className="text-sm text-blue-700">
-                    ℹ️ Digunakan untuk peminjaman buku pelajaran kelas.
-                  </p>
-                </div>
+            {formData.borrowType === 'Harian' &&
+              formData.loanSubType === 'Kelas' && (
+                <div className="space-y-3">
+                  <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                    <p className="text-sm text-blue-700">
+                      ℹ️ Digunakan untuk peminjaman buku pelajaran kelas.
+                    </p>
+                  </div>
 
-                <div className="bg-muted/30 p-4 rounded-lg border border-border space-y-4">
-                  <div>
+                  <div className="bg-muted/30 p-4 rounded-lg border border-border">
                     <label className="block text-sm font-medium text-foreground mb-2">
                       Kelas yang Meminjam
                     </label>
@@ -1424,7 +1867,10 @@ export function Transactions({
                       type="text"
                       value={formData.className}
                       onChange={(event) =>
-                        setFormData({ ...formData, className: event.target.value })
+                        setFormData({
+                          ...formData,
+                          className: event.target.value,
+                        })
                       }
                       className="w-full px-4 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                       placeholder="Contoh: X-1, XI-IPA-2"
@@ -1432,85 +1878,29 @@ export function Transactions({
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Pilih Buku Pelajaran
-                    </label>
-
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={bookInputs[0]?.search || ''}
-                        onChange={(event) => {
-                          updateBookInput(
-                            bookInputs[0]?.id || '1',
-                            event.target.value,
-                            null
-                          );
-                          setShowBookDropdownId(bookInputs[0]?.id || '1');
-                        }}
-                        onFocus={() => setShowBookDropdownId(bookInputs[0]?.id || '1')}
-                        className="w-full px-4 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                        placeholder="Cari buku pelajaran..."
-                        required
-                      />
-
-                      {renderBookDropdown(bookInputs[0], isLessonBook)}
-                    </div>
-
-                    {renderSelectedBook(bookInputs[0])}
-                  </div>
+                  {renderBookInput(bookInputs[0], 0, isLessonBook)}
 
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-2">
                       Jumlah Buku
                     </label>
 
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFormData({
-                            ...formData,
-                            quantity: Math.max(1, formData.quantity - 1),
-                          })
-                        }
-                        className="w-10 h-10 flex items-center justify-center bg-accent hover:bg-accent/70 border border-border rounded-lg transition-colors"
-                      >
-                        <span className="text-xl font-bold text-foreground">−</span>
-                      </button>
-
-                      <input
-                        type="number"
-                        value={formData.quantity}
-                        onChange={(event) =>
-                          setFormData({
-                            ...formData,
-                            quantity: Math.max(1, Number(event.target.value) || 1),
-                          })
-                        }
-                        className="flex-1 px-4 py-3 bg-input-background border border-border rounded-lg text-center font-bold text-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                        min="1"
-                        required
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFormData({
-                            ...formData,
-                            quantity: formData.quantity + 1,
-                          })
-                        }
-                        className="w-10 h-10 flex items-center justify-center bg-accent hover:bg-accent/70 border border-border rounded-lg transition-colors"
-                      >
-                        <span className="text-xl font-bold text-foreground">+</span>
-                      </button>
-                    </div>
+                    <input
+                      type="number"
+                      value={formData.quantity}
+                      onChange={(event) =>
+                        setFormData({
+                          ...formData,
+                          quantity: Math.max(1, Number(event.target.value) || 1),
+                        })
+                      }
+                      className="w-full px-4 py-3 bg-input-background border border-border rounded-lg text-center font-bold text-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      min="1"
+                      required
+                    />
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
             {formData.borrowType === 'Mingguan' && (
               <div className="space-y-3">
@@ -1518,7 +1908,7 @@ export function Transactions({
                   renderBookInput(input, index, (book) => !isLessonBook(book))
                 )}
 
-                {bookInputs.length < 2 && (
+                {bookInputs.length < 2 && !editMode && (
                   <button
                     type="button"
                     onClick={addBookInput}
@@ -1531,13 +1921,14 @@ export function Transactions({
 
                 <div className="p-3 bg-accent/50 rounded-lg">
                   <p className="text-sm text-foreground">
-                    <span className="font-semibold">{selectedBookCount}</span> / 2 buku dipilih
+                    <span className="font-semibold">{selectedBookCount}</span>{' '}
+                    / 2 buku dipilih
                   </p>
                 </div>
               </div>
             )}
 
-            {(formData.borrowType === 'Tahunan' || formData.borrowType === 'Guru') && (
+            {isTahunanOrGuru && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-muted-foreground">
@@ -1546,28 +1937,34 @@ export function Transactions({
                       : 'Tidak ada batas jumlah buku'}
                   </p>
 
-                  <button
-                    type="button"
-                    onClick={addBookInput}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg text-sm font-medium transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Tambah Buku
-                  </button>
+                  {!editMode && (
+                    <button
+                      type="button"
+                      onClick={addBookInput}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Tambah Buku
+                    </button>
+                  )}
                 </div>
 
                 {bookInputs.map((input, index) =>
                   renderBookInput(
                     input,
                     index,
-                    formData.borrowType === 'Tahunan' ? isLessonBook : undefined
+                    formData.borrowType === 'Tahunan'
+                      ? isLessonBook
+                      : undefined
                   )
                 )}
 
                 <div className="p-3 bg-accent/50 rounded-lg">
                   <p className="text-sm text-foreground">
-                    <span className="font-semibold">{selectedBookCount}</span> dari{' '}
-                    <span className="font-semibold">{bookInputs.length}</span> buku dipilih
+                    <span className="font-semibold">{selectedBookCount}</span>{' '}
+                    dari{' '}
+                    <span className="font-semibold">{bookInputs.length}</span>{' '}
+                    buku dipilih
                   </p>
                 </div>
               </div>
@@ -1592,7 +1989,7 @@ export function Transactions({
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
                         Tanggal Peminjaman
@@ -1600,7 +1997,9 @@ export function Transactions({
                       <input
                         type="date"
                         value={formData.borrowDate}
-                        onChange={(event) => handleBorrowDateChange(event.target.value)}
+                        onChange={(event) =>
+                          handleBorrowDateChange(event.target.value)
+                        }
                         className="w-full px-4 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                         required
                       />
@@ -1663,19 +2062,13 @@ export function Transactions({
                   <input
                     type="date"
                     value={formData.borrowDate}
-                    onChange={(event) =>
-                      setFormData({
-                        ...formData,
-                        borrowDate: event.target.value,
-                        returnDate: '',
-                      })
-                    }
+                    onChange={(event) => handleBorrowDateChange(event.target.value)}
                     className="w-full px-4 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     required
                   />
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-2">
                       Tanggal Peminjaman
@@ -1683,7 +2076,9 @@ export function Transactions({
                     <input
                       type="date"
                       value={formData.borrowDate}
-                      onChange={(event) => handleBorrowDateChange(event.target.value)}
+                      onChange={(event) =>
+                        handleBorrowDateChange(event.target.value)
+                      }
                       className="w-full px-4 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                       required
                     />
@@ -1705,14 +2100,15 @@ export function Transactions({
             </div>
           </div>
 
-          <div className="flex gap-3 pt-4">
+          <div className="flex flex-col sm:flex-row gap-3 pt-4">
             <button
               type="button"
               onClick={() => {
                 setShowModal(false);
                 handleReset();
               }}
-              className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium"
+              disabled={isSaving}
+              className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed"
             >
               Batal
             </button>
@@ -1720,7 +2116,8 @@ export function Transactions({
             <button
               type="button"
               onClick={handleReset}
-              className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium"
+              disabled={isSaving}
+              className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed"
             >
               Reset
             </button>
@@ -1728,6 +2125,7 @@ export function Transactions({
             <button
               type="submit"
               disabled={
+                isSaving ||
                 !selectedMember ||
                 selectedBookCount === 0 ||
                 (formData.borrowType === 'Harian' &&
@@ -1742,7 +2140,7 @@ export function Transactions({
               }
               className="flex-1 px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg font-medium transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {editMode ? 'Update' : 'Simpan'}
+              {isSaving ? 'Menyimpan...' : editMode ? 'Update' : 'Simpan'}
             </button>
           </div>
         </form>
@@ -1762,38 +2160,44 @@ export function Transactions({
                 </p>
 
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    detailBatch.loanType === 'Harian'
-                      ? 'bg-[#fff3cc] text-[#9d7a2f]'
-                      : detailBatch.loanType === 'Mingguan'
-                      ? 'bg-[#e8f3ff] text-[#5a7ba0]'
-                      : detailBatch.loanType === 'Tahunan'
-                      ? 'bg-[#f5c842]/20 text-[#9d7a2f]'
-                      : 'bg-[#d4f1e3] text-[#2d8659]'
-                  }`}>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      detailBatch.loanType === 'Harian'
+                        ? 'bg-[#fff3cc] text-[#9d7a2f]'
+                        : detailBatch.loanType === 'Mingguan'
+                        ? 'bg-[#e8f3ff] text-[#5a7ba0]'
+                        : detailBatch.loanType === 'Tahunan'
+                        ? 'bg-[#f5c842]/20 text-[#9d7a2f]'
+                        : 'bg-[#d4f1e3] text-[#2d8659]'
+                    }`}
+                  >
                     {detailBatch.loanType}
                   </span>
 
-                  {detailBatch.loanSubType && detailBatch.loanType !== 'Mingguan' && (
+                  {detailBatch.loanSubType && (
                     <span className="text-xs text-muted-foreground">
                       {detailBatch.loanSubType}
                     </span>
                   )}
 
-                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                    detailBatch.status === 'Aktif'
-                      ? 'bg-[#e8f3ff] text-[#5a7ba0]'
-                      : 'bg-red-100 text-red-700'
-                  }`}>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                      detailBatch.status === 'Aktif'
+                        ? 'bg-[#e8f3ff] text-[#5a7ba0]'
+                        : 'bg-red-100 text-red-700'
+                    }`}
+                  >
                     {detailBatch.status}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="bg-muted/40 rounded-lg p-3">
-                <p className="text-xs text-muted-foreground mb-1">Tanggal Pinjam</p>
+                <p className="text-xs text-muted-foreground mb-1">
+                  Tanggal Pinjam
+                </p>
                 <p className="font-semibold text-foreground text-sm">
                   {detailBatch.borrowDate}
                 </p>
@@ -1803,8 +2207,8 @@ export function Transactions({
                 <p className="text-xs text-muted-foreground mb-1">Jatuh Tempo</p>
                 <p className="font-semibold text-foreground text-sm">
                   {detailBatch.loanType === 'Guru'
-                    ? 'Tidak terbatas'
-                    : detailBatch.dueDate}
+                    ? 'Sampai dikembalikan'
+                    : detailBatch.dueDate || '-'}
                 </p>
               </div>
 
@@ -1840,20 +2244,25 @@ export function Transactions({
 
               <div className="divide-y divide-border">
                 {detailBatch.items.map((item, index) => (
-                  <div key={item.id} className="flex items-center gap-3 px-4 py-3">
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 px-4 py-3"
+                  >
                     <span className="text-xs text-muted-foreground w-5">
                       {index + 1}
                     </span>
                     <span className="font-mono font-bold text-sm text-primary w-20">
                       {item.bookNumber}
                     </span>
-                    <span className="text-sm text-foreground">{item.bookTitle}</span>
+                    <span className="text-sm text-foreground">
+                      {item.bookTitle}
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={() => setDetailBatchId(null)}
                 className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium text-sm"
@@ -1885,7 +2294,7 @@ export function Transactions({
       >
         {selectedBatchForReturn && (
           <form onSubmit={handleReturnSubmit} className="space-y-5">
-            <div className="bg-muted/40 border border-border rounded-xl p-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <div className="bg-muted/40 border border-border rounded-xl p-4 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
               <div>
                 <span className="text-muted-foreground">Anggota</span>
                 <p className="font-semibold text-foreground">
@@ -1909,11 +2318,13 @@ export function Transactions({
 
               <div>
                 <span className="text-muted-foreground">Status</span>
-                <span className={`inline-block mt-1 px-3 py-0.5 rounded-full text-xs font-semibold ${
-                  selectedBatchForReturn.status === 'Terlambat'
-                    ? 'bg-red-100 text-red-700'
-                    : 'bg-[#e8f3ff] text-[#5a7ba0]'
-                }`}>
+                <span
+                  className={`inline-block mt-1 px-3 py-0.5 rounded-full text-xs font-semibold ${
+                    selectedBatchForReturn.status === 'Terlambat'
+                      ? 'bg-red-100 text-red-700'
+                      : 'bg-[#e8f3ff] text-[#5a7ba0]'
+                  }`}
+                >
                   {selectedBatchForReturn.status}
                 </span>
               </div>
@@ -1939,28 +2350,30 @@ export function Transactions({
               </label>
 
               <div className="grid grid-cols-3 gap-3">
-                {(['Bagus', 'Rusak', 'Hilang'] as BookCondition[]).map((condition) => (
-                  <button
-                    key={condition}
-                    type="button"
-                    onClick={() => {
-                      setBookCondition(condition);
-                      if (condition === 'Rusak' || condition === 'Hilang') {
-                        setPenaltyData({
-                          ...penaltyData,
-                          type: 'Buku Pengganti',
-                        });
-                      }
-                    }}
-                    className={`px-4 py-3 rounded-lg font-medium transition-all border ${
-                      bookCondition === condition
-                        ? 'bg-primary text-white border-primary'
-                        : 'bg-white border-border hover:bg-accent'
-                    }`}
-                  >
-                    {condition}
-                  </button>
-                ))}
+                {(['Bagus', 'Rusak', 'Hilang'] as BookCondition[]).map(
+                  (condition) => (
+                    <button
+                      key={condition}
+                      type="button"
+                      onClick={() => {
+                        setBookCondition(condition);
+                        if (condition === 'Rusak' || condition === 'Hilang') {
+                          setPenaltyData({
+                            ...penaltyData,
+                            type: 'Buku Pengganti',
+                          });
+                        }
+                      }}
+                      className={`px-4 py-3 rounded-lg font-medium transition-all border ${
+                        bookCondition === condition
+                          ? 'bg-primary text-white border-primary'
+                          : 'bg-white border-border hover:bg-accent'
+                      }`}
+                    >
+                      {condition}
+                    </button>
+                  )
+                )}
               </div>
             </div>
 
@@ -1980,7 +2393,7 @@ export function Transactions({
                       Jenis Sanksi
                     </label>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {(['Buku Donasi', 'Buku Pengganti'] as PenaltyType[]).map(
                         (type) => (
                           <button
@@ -1999,11 +2412,13 @@ export function Transactions({
                             }`}
                           >
                             <p className="font-semibold text-sm">{type}</p>
-                            <p className={`text-xs mt-0.5 ${
-                              penaltyData.type === type
-                                ? 'opacity-80'
-                                : 'text-muted-foreground'
-                            }`}>
+                            <p
+                              className={`text-xs mt-0.5 ${
+                                penaltyData.type === type
+                                  ? 'opacity-80'
+                                  : 'text-muted-foreground'
+                              }`}
+                            >
                               {type === 'Buku Donasi'
                                 ? 'Terlambat mengembalikan'
                                 : 'Buku hilang / rusak'}
@@ -2063,28 +2478,46 @@ export function Transactions({
               </div>
             )}
 
-            <div className="flex gap-3 pt-1">
+            <div className="flex flex-col sm:flex-row gap-3 pt-1">
               <button
                 type="button"
-                onClick={() => {
-                  setReturnModal(false);
-                  setSelectedBatchForReturn(null);
-                }}
-                className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium text-sm"
+                onClick={() => setReturnModal(false)}
+                disabled={isSaving}
+                className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium text-sm disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 Batal
               </button>
 
               <button
                 type="submit"
-                className="flex-1 px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg font-medium transition-all shadow-sm text-sm"
+                disabled={isSaving}
+                className="flex-1 px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg font-medium transition-all shadow-sm text-sm disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Proses Pengembalian
+                {isSaving ? 'Memproses...' : 'Proses Pengembalian'}
               </button>
             </div>
           </form>
         )}
       </Modal>
+
+      <ConfirmDialog
+        isOpen={deleteDialog.isOpen}
+        onClose={() => setDeleteDialog({ isOpen: false, batchId: null })}
+        onConfirm={confirmDelete}
+        title="Hapus Peminjaman"
+        message={`Yakin ingin menghapus semua transaksi peminjaman milik ${
+          deleteDialog.memberName ?? 'anggota ini'
+        }? Buku akan dikembalikan ke status Tersedia.`}
+        confirmText={isSaving ? 'Menghapus...' : 'Hapus'}
+        cancelText="Batal"
+        type="danger"
+      />
+
+      <SuccessModal
+        isOpen={!!successMsg}
+        message={successMsg}
+        onClose={() => setSuccessMsg('')}
+      />
 
       {toast && (
         <Toast
@@ -2093,23 +2526,6 @@ export function Transactions({
           onClose={() => setToast(null)}
         />
       )}
-
-      <SuccessModal
-        isOpen={!!successMsg}
-        message={successMsg}
-        onClose={() => setSuccessMsg('')}
-      />
-
-      <ConfirmDialog
-        isOpen={deleteDialog.isOpen}
-        onClose={() => setDeleteDialog({ isOpen: false, batchId: null })}
-        onConfirm={confirmDelete}
-        title="Hapus Peminjaman"
-        message={`Yakin ingin menghapus peminjaman ${deleteDialog.bookTitle ? `"${deleteDialog.bookTitle}"` : 'ini'} atas nama ${deleteDialog.memberName ?? '-'}? Tindakan ini tidak dapat dibatalkan.`}
-        confirmText="Hapus"
-        cancelText="Batal"
-        type="danger"
-      />
     </div>
   );
 }

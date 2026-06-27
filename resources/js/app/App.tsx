@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import type { Penalty } from './data/mockData';
 import { Sidebar } from './components/Sidebar';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
@@ -13,18 +12,30 @@ import { LandingPage } from './pages/LandingPage';
 import { PublicVisitorForm } from './pages/PublicVisitorForm';
 import { PublicSearchBooks } from './pages/PublicSearchBooks';
 
-// Re-export Penalty dari mockData agar halaman lain cukup import dari App
-export type { Penalty as PenaltyRecord } from './data/mockData';
+export interface PenaltyRecord {
+  id: number;
+  borrowingId: number;
+  date: string;
+  memberId?: number;
+  memberName: string;
+  bookNumber: string;
+  bookTitle: string;
+  loanType: string;
+  reason: string;
+  penaltyType: string;
+  penaltyBookTitle: string;
+  notes?: string;
+}
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [publicPage, setPublicPage] = useState('landing');
   const [showLogin, setShowLogin] = useState(false);
-  const [penaltyRecords, setPenaltyRecords] = useState<Penalty[]>([]);
+  const [penaltyRecords, setPenaltyRecords] = useState<PenaltyRecord[]>([]);
   const [quickLoanType, setQuickLoanType] = useState<string | null>(null);
 
-  const handleAddPenalty = (record: Penalty) => {
+  const handleAddPenalty = (record: PenaltyRecord) => {
     setPenaltyRecords((prev) => [...prev, record]);
   };
 
@@ -39,6 +50,7 @@ export default function App() {
     setPublicPage('landing');
     setShowLogin(false);
     setQuickLoanType(null);
+    setPenaltyRecords([]);
   };
 
   const handleNavigate = (page: string) => {

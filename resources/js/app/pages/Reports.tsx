@@ -418,7 +418,7 @@ export function Reports({ penaltyRecords = [] }: ReportsProps) {
       ] = await Promise.all([
         fetchApiArray(['/api/borrowings']),
         fetchApiArray(['/api/visitors']),
-        fetchApiArray(['/api/book-copies', '/api/books']),
+        fetchApiArray(['/api/books']),
         fetchApiArray(['/api/members']),
         fetchApiArray(['/api/penalties']),
       ]);

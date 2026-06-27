@@ -279,9 +279,10 @@ class BorrowingController extends BaseApiController
 
     private function refreshLateStatuses(): void
     {
-        Borrowing::query()
-            ->where('status', 'Aktif')
-            ->whereDate('due_date', '<', Carbon::today())
-            ->update(['status' => 'Terlambat']);
+    Borrowing::query()
+        ->where('status', 'Aktif')
+        ->where('loan_type', '!=', 'Guru')
+        ->whereDate('due_date', '<', Carbon::today())
+        ->update(['status' => 'Terlambat']);
     }
 }

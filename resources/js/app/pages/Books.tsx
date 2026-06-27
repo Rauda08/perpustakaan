@@ -1,11 +1,22 @@
-import { useState, useEffect } from 'react';
-import { Search, Plus, Edit2, Trash2, BookOpen, Eye, Check, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  Search,
+  Plus,
+  Edit2,
+  Trash2,
+  BookOpen,
+  Eye,
+  Check,
+  X,
+  AlertCircle,
+} from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { SuccessModal } from '../components/SuccessModal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 
 interface Book {
   id: number;
+  bookMasterId: number;
   title: string;
   author: string;
   category: string;
@@ -17,6 +28,7 @@ interface Book {
 }
 
 interface GroupedBook {
+  bookMasterId: number;
   title: string;
   author: string;
   category: string;
@@ -30,28 +42,187 @@ interface GroupedBook {
 
 const ITEMS_PER_PAGE = 10;
 
-const initialBooks: Book[] = [
-  { id: 1, title: 'Laskar Pelangi', author: 'Andrea Hirata', category: 'Fiksi', number: 'BK001', shelf: 'A-01', status: 'Tersedia', publishYear: '2005', acquisitionYear: '2010' },
-  { id: 2, title: 'Laskar Pelangi', author: 'Andrea Hirata', category: 'Fiksi', number: 'BK002', shelf: 'A-01', status: 'Dipinjam', publishYear: '2005', acquisitionYear: '2010' },
-  { id: 3, title: 'Laskar Pelangi', author: 'Andrea Hirata', category: 'Fiksi', number: 'BK003', shelf: 'A-01', status: 'Tersedia', publishYear: '2005', acquisitionYear: '2015' },
-  { id: 4, title: 'Bumi Manusia', author: 'Pramoedya Ananta Toer', category: 'Fiksi', number: 'BK004', shelf: 'A-02', status: 'Dipinjam', publishYear: '1980', acquisitionYear: '2012' },
-  { id: 5, title: 'Bumi Manusia', author: 'Pramoedya Ananta Toer', category: 'Fiksi', number: 'BK005', shelf: 'A-02', status: 'Tersedia', publishYear: '1980', acquisitionYear: '2012' },
-  { id: 6, title: 'Negeri 5 Menara', author: 'Ahmad Fuadi', category: 'Fiksi', number: 'BK006', shelf: 'A-03', status: 'Tersedia', publishYear: '2009', acquisitionYear: '2013' },
-  { id: 7, title: 'Perahu Kertas', author: 'Dee Lestari', category: 'Fiksi', number: 'BK007', shelf: 'A-04', status: 'Tersedia', publishYear: '2009', acquisitionYear: '2014' },
-  { id: 8, title: 'Sang Pemimpi', author: 'Andrea Hirata', category: 'Fiksi', number: 'BK008', shelf: 'A-05', status: 'Dipinjam', publishYear: '2006', acquisitionYear: '2011' },
-  { id: 9, title: 'Filosofi Kopi', author: 'Dewi Lestari', category: 'Fiksi', number: 'BK009', shelf: 'B-01', status: 'Tersedia', publishYear: '2006', acquisitionYear: '2016' },
-  { id: 10, title: 'Ayat-Ayat Cinta', author: 'Habiburrahman El Shirazy', category: 'Agama', number: 'BK010', shelf: 'B-02', status: 'Tersedia', publishYear: '2004', acquisitionYear: '2013' },
-  { id: 11, title: 'Matematika Kelas X', author: 'Tim Penulis', category: 'Pendidikan', number: 'BK011', shelf: 'C-01', status: 'Tersedia', publishYear: '2022', acquisitionYear: '2023' },
-  { id: 12, title: 'Matematika Kelas X', author: 'Tim Penulis', category: 'Pendidikan', number: 'BK012', shelf: 'C-01', status: 'Tersedia', publishYear: '2022', acquisitionYear: '2023' },
-];
+const extractArray = (payload: any): any[] => {
+  const data = payload?.data ?? payload;
+
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.books)) return data.books;
+  if (Array.isArray(data?.bookMasters)) return data.bookMasters;
+  if (Array.isArray(data?.book_masters)) return data.book_masters;
+
+  return [];
+};
+
+const getApiErrorMessage = async (response: Response, fallback: string) => {
+  const result = await response.json().catch(() => null);
+
+  return (
+    result?.message ||
+    result?.errors?.title?.[0] ||
+    result?.errors?.author?.[0] ||
+    result?.errors?.category?.[0] ||
+    result?.errors?.shelf?.[0] ||
+    result?.errors?.publish_year?.[0] ||
+    result?.errors?.number?.[0] ||
+    result?.errors?.acquisition_year?.[0] ||
+    result?.errors?.status?.[0] ||
+    fallback
+  );
+};
+
+const normalizeBooks = (items: any[]): Book[] => {
+  const books: Book[] = [];
+
+  items.forEach((item) => {
+    const bookMasterId = Number(
+      item.id ??
+        item.bookMasterId ??
+        item.book_master_id ??
+        item.bookMaster?.id ??
+        item.book_master?.id ??
+        0
+    );
+
+    const title =
+      item.title ??
+      item.bookTitle ??
+      item.book_title ??
+      item.bookMaster?.title ??
+      item.book_master?.title ??
+      '-';
+
+    const author =
+      item.author ??
+      item.bookAuthor ??
+      item.book_author ??
+      item.bookMaster?.author ??
+      item.book_master?.author ??
+      '-';
+
+    const category =
+      item.category ??
+      item.bookCategory ??
+      item.book_category ??
+      item.bookMaster?.category ??
+      item.book_master?.category ??
+      '-';
+
+    const shelf =
+      item.shelf ??
+      item.rack ??
+      item.location ??
+      item.bookMaster?.shelf ??
+      item.book_master?.shelf ??
+      '-';
+
+    const publishYear = String(
+      item.publishYear ??
+        item.publish_year ??
+        item.bookMaster?.publishYear ??
+        item.bookMaster?.publish_year ??
+        item.book_master?.publishYear ??
+        item.book_master?.publish_year ??
+        ''
+    );
+
+    const copies = item.copies ?? item.bookCopies ?? item.book_copies ?? null;
+
+    if (Array.isArray(copies) && copies.length > 0) {
+      copies.forEach((copy: any) => {
+        books.push({
+          id: Number(copy.id),
+          bookMasterId: Number(
+            copy.bookMasterId ??
+              copy.book_master_id ??
+              copy.bookMaster?.id ??
+              copy.book_master?.id ??
+              bookMasterId
+          ),
+          title:
+            item.title ??
+            copy.title ??
+            copy.bookMaster?.title ??
+            copy.book_master?.title ??
+            title,
+          author:
+            item.author ??
+            copy.author ??
+            copy.bookMaster?.author ??
+            copy.book_master?.author ??
+            author,
+          category:
+            item.category ??
+            copy.category ??
+            copy.bookMaster?.category ??
+            copy.book_master?.category ??
+            category,
+          shelf:
+            item.shelf ??
+            copy.shelf ??
+            copy.rack ??
+            copy.bookMaster?.shelf ??
+            copy.book_master?.shelf ??
+            shelf,
+          publishYear: String(
+            item.publishYear ??
+              item.publish_year ??
+              copy.publishYear ??
+              copy.publish_year ??
+              copy.bookMaster?.publishYear ??
+              copy.bookMaster?.publish_year ??
+              copy.book_master?.publishYear ??
+              copy.book_master?.publish_year ??
+              publishYear
+          ),
+          number: copy.number ?? copy.bookNumber ?? copy.book_number ?? '-',
+          status: copy.status ?? 'Tersedia',
+          acquisitionYear: String(
+            copy.acquisitionYear ?? copy.acquisition_year ?? ''
+          ),
+        });
+      });
+
+      return;
+    }
+
+    if (item.number || item.bookNumber || item.book_number) {
+      books.push({
+        id: Number(item.id),
+        bookMasterId: Number(
+          item.bookMasterId ?? item.book_master_id ?? bookMasterId
+        ),
+        title,
+        author,
+        category,
+        shelf,
+        publishYear,
+        number: item.number ?? item.bookNumber ?? item.book_number ?? '-',
+        status: item.status ?? 'Tersedia',
+        acquisitionYear: String(
+          item.acquisitionYear ?? item.acquisition_year ?? ''
+        ),
+      });
+    }
+  });
+
+  return books.filter(
+    (book) => book.id && book.bookMasterId && book.title !== '-'
+  );
+};
 
 export function Books() {
-  const [books, setBooks] = useState<Book[]>(initialBooks);
+  const [books, setBooks] = useState<Book[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('Semua');
   const [currentPage, setCurrentPage] = useState(1);
   const [successMsg, setSuccessMsg] = useState('');
   const [deleteErrorMsg, setDeleteErrorMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
   const [showBookModal, setShowBookModal] = useState(false);
   const [editingMasterBook, setEditingMasterBook] = useState<Book | null>(null);
@@ -87,17 +258,53 @@ export function Books() {
     type: 'group' | 'copy';
     title?: string;
     author?: string;
+    bookMasterId?: number;
     copyId?: number;
   }>({
     isOpen: false,
     type: 'group',
   });
 
+  const loadBooks = async () => {
+    setLoading(true);
+    setErrorMsg('');
+
+    try {
+      const response = await fetch('/api/books', {
+        headers: {
+          Accept: 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          await getApiErrorMessage(response, 'Gagal memuat data buku.')
+        );
+      }
+
+      const result = await response.json();
+      const normalizedBooks = normalizeBooks(extractArray(result));
+
+      setBooks(normalizedBooks);
+    } catch (error: any) {
+      setErrorMsg(error.message || 'Gagal memuat data buku.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBooks();
+  }, []);
+
   const filteredBooks = books.filter((book) => {
+    const keyword = searchTerm.toLowerCase();
+
     const matchesSearch =
-      book.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      book.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      book.category.toLowerCase().includes(searchTerm.toLowerCase());
+      book.title.toLowerCase().includes(keyword) ||
+      book.author.toLowerCase().includes(keyword) ||
+      book.category.toLowerCase().includes(keyword) ||
+      book.number.toLowerCase().includes(keyword);
 
     const matchesCategory =
       categoryFilter === 'Semua' || book.category === categoryFilter;
@@ -106,13 +313,11 @@ export function Books() {
   });
 
   const groupedBooks: GroupedBook[] = [];
-  const bookMap = new Map<string, GroupedBook>();
+  const bookMap = new Map<number, GroupedBook>();
 
   filteredBooks.forEach((book) => {
-    const key = `${book.title}||${book.author}`;
-
-    if (bookMap.has(key)) {
-      const group = bookMap.get(key)!;
+    if (bookMap.has(book.bookMasterId)) {
+      const group = bookMap.get(book.bookMasterId)!;
 
       group.total++;
 
@@ -125,6 +330,7 @@ export function Books() {
       group.copies.push(book);
     } else {
       const group: GroupedBook = {
+        bookMasterId: book.bookMasterId,
         title: book.title,
         author: book.author,
         category: book.category,
@@ -136,7 +342,7 @@ export function Books() {
         copies: [book],
       };
 
-      bookMap.set(key, group);
+      bookMap.set(book.bookMasterId, group);
       groupedBooks.push(group);
     }
   });
@@ -169,9 +375,7 @@ export function Books() {
 
   const syncedDetail = detailGroup
     ? groupedBooks.find(
-        (group) =>
-          group.title === detailGroup.title &&
-          group.author === detailGroup.author
+        (group) => group.bookMasterId === detailGroup.bookMasterId
       ) ?? null
     : null;
 
@@ -188,6 +392,7 @@ export function Books() {
       status: 'Tersedia',
     });
     setShowBookModal(true);
+    setErrorMsg('');
   };
 
   const openEditBook = (group: GroupedBook) => {
@@ -205,40 +410,79 @@ export function Books() {
       status: referenceBook.status,
     });
     setShowBookModal(true);
+    setErrorMsg('');
   };
 
-  const submitBookForm = (event: React.FormEvent) => {
+  const submitBookForm = async (event: React.FormEvent) => {
     event.preventDefault();
+    setSaving(true);
+    setErrorMsg('');
 
-    if (editingMasterBook) {
-      setBooks(
-        books.map((book) =>
-          book.title === editingMasterBook.title &&
-          book.author === editingMasterBook.author
-            ? {
-                ...book,
-                title: bookForm.title,
-                author: bookForm.author,
-                category: bookForm.category,
-                shelf: bookForm.shelf,
-                publishYear: bookForm.publishYear,
-              }
-            : book
-        )
-      );
+    try {
+      if (editingMasterBook) {
+        const response = await fetch(
+          `/api/book-masters/${editingMasterBook.bookMasterId}`,
+          {
+            method: 'PUT',
+            headers: {
+              Accept: 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              title: bookForm.title,
+              author: bookForm.author,
+              category: bookForm.category,
+              shelf: bookForm.shelf,
+              publish_year: bookForm.publishYear,
+            }),
+          }
+        );
 
-      setSuccessMsg('Info buku berhasil diperbarui!');
-    } else {
-      const newBook: Book = {
-        id: Math.max(...books.map((book) => book.id), 0) + 1,
-        ...bookForm,
-      };
+        if (!response.ok) {
+          throw new Error(
+            await getApiErrorMessage(
+              response,
+              'Gagal memperbarui data buku.'
+            )
+          );
+        }
 
-      setBooks([...books, newBook]);
-      setSuccessMsg(`Buku "${bookForm.title}" berhasil ditambahkan!`);
+        setSuccessMsg('Info buku berhasil diperbarui!');
+      } else {
+        const response = await fetch('/api/books', {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            title: bookForm.title,
+            author: bookForm.author,
+            category: bookForm.category,
+            shelf: bookForm.shelf,
+            publish_year: bookForm.publishYear,
+            number: bookForm.number,
+            status: bookForm.status,
+            acquisition_year: bookForm.acquisitionYear,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(
+            await getApiErrorMessage(response, 'Gagal menambahkan buku.')
+          );
+        }
+
+        setSuccessMsg(`Buku "${bookForm.title}" berhasil ditambahkan!`);
+      }
+
+      setShowBookModal(false);
+      await loadBooks();
+    } catch (error: any) {
+      setErrorMsg(error.message || 'Gagal menyimpan data buku.');
+    } finally {
+      setSaving(false);
     }
-
-    setShowBookModal(false);
   };
 
   const startEditCopy = (copy: Book) => {
@@ -251,65 +495,96 @@ export function Books() {
     setShowAddCopyForm(false);
   };
 
-  const saveCopyEdit = (copyId: number) => {
-    setBooks(
-      books.map((book) =>
-        book.id === copyId
-          ? {
-              ...book,
-              ...copyEditForm,
-            }
-          : book
-      )
-    );
+  const saveCopyEdit = async (copyId: number) => {
+    setSaving(true);
+    setErrorMsg('');
 
-    setEditingCopyId(null);
-    setSuccessMsg('Eksemplar berhasil diperbarui!');
+    try {
+      const response = await fetch(`/api/book-copies/${copyId}`, {
+        method: 'PUT',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          number: copyEditForm.number,
+          acquisition_year: copyEditForm.acquisitionYear,
+          status: copyEditForm.status,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          await getApiErrorMessage(response, 'Gagal memperbarui eksemplar.')
+        );
+      }
+
+      setEditingCopyId(null);
+      setSuccessMsg('Eksemplar berhasil diperbarui!');
+      await loadBooks();
+    } catch (error: any) {
+      setErrorMsg(error.message || 'Gagal memperbarui eksemplar.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const submitAddCopy = (event: React.FormEvent) => {
+  const submitAddCopy = async (event: React.FormEvent) => {
     event.preventDefault();
 
     if (!syncedDetail) {
       return;
     }
 
-    const referenceBook = syncedDetail.copies[0];
+    setSaving(true);
+    setErrorMsg('');
 
-    const newBook: Book = {
-      id: Math.max(...books.map((book) => book.id), 0) + 1,
-      title: referenceBook.title,
-      author: referenceBook.author,
-      category: referenceBook.category,
-      shelf: referenceBook.shelf,
-      publishYear: referenceBook.publishYear,
-      number: newCopyForm.number,
-      acquisitionYear: newCopyForm.acquisitionYear,
-      status: newCopyForm.status,
-    };
+    try {
+      const response = await fetch(
+        `/api/book-masters/${syncedDetail.bookMasterId}/copies`,
+        {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            number: newCopyForm.number,
+            acquisition_year: newCopyForm.acquisitionYear,
+            status: newCopyForm.status,
+          }),
+        }
+      );
 
-    setBooks([...books, newBook]);
-    setNewCopyForm({
-      number: '',
-      acquisitionYear: '',
-      status: 'Tersedia',
-    });
-    setShowAddCopyForm(false);
-    setSuccessMsg(`Eksemplar ${newCopyForm.number} berhasil ditambahkan!`);
+      if (!response.ok) {
+        throw new Error(
+          await getApiErrorMessage(response, 'Gagal menambahkan eksemplar.')
+        );
+      }
+
+      setNewCopyForm({
+        number: '',
+        acquisitionYear: '',
+        status: 'Tersedia',
+      });
+      setShowAddCopyForm(false);
+      setSuccessMsg(`Eksemplar ${newCopyForm.number} berhasil ditambahkan!`);
+      await loadBooks();
+    } catch (error: any) {
+      setErrorMsg(error.message || 'Gagal menambahkan eksemplar.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const confirmDeleteGroup = (title: string, author: string) => {
-    const borrowedBooks = books.filter((book) => {
-      return (
-        book.title === title &&
-        book.author === author &&
-        book.status === 'Dipinjam'
-      );
-    });
+  const confirmDeleteGroup = (group: GroupedBook) => {
+    const borrowedBooks = group.copies.filter(
+      (book) => book.status === 'Dipinjam'
+    );
 
     if (borrowedBooks.length > 0) {
       setDeleteErrorMsg(
-        `Tidak dapat menghapus "${title}" — ${borrowedBooks.length} eksemplar masih berstatus Dipinjam (${borrowedBooks
+        `Tidak dapat menghapus "${group.title}" — ${borrowedBooks.length} eksemplar masih berstatus Dipinjam (${borrowedBooks
           .map((book) => book.number)
           .join(', ')}).`
       );
@@ -319,8 +594,9 @@ export function Books() {
     setConfirmDialog({
       isOpen: true,
       type: 'group',
-      title,
-      author,
+      title: group.title,
+      author: group.author,
+      bookMasterId: group.bookMasterId,
     });
   };
 
@@ -341,43 +617,63 @@ export function Books() {
     });
   };
 
-  const executeDelete = () => {
-    if (
-      confirmDialog.type === 'group' &&
-      confirmDialog.title &&
-      confirmDialog.author
-    ) {
-      const count = books.filter((book) => {
-        return (
-          book.title === confirmDialog.title &&
-          book.author === confirmDialog.author
+  const executeDelete = async () => {
+    setSaving(true);
+    setErrorMsg('');
+
+    try {
+      if (confirmDialog.type === 'group' && confirmDialog.bookMasterId) {
+        const response = await fetch(
+          `/api/book-masters/${confirmDialog.bookMasterId}`,
+          {
+            method: 'DELETE',
+            headers: {
+              Accept: 'application/json',
+            },
+          }
         );
-      }).length;
 
-      setBooks(
-        books.filter((book) => {
-          return !(
-            book.title === confirmDialog.title &&
-            book.author === confirmDialog.author
+        if (!response.ok) {
+          throw new Error(
+            await getApiErrorMessage(response, 'Gagal menghapus buku.')
           );
-        })
-      );
+        }
 
-      setDetailGroup(null);
-      setSuccessMsg(
-        `"${confirmDialog.title}" (${count} eksemplar) berhasil dihapus!`
-      );
-    } else if (confirmDialog.type === 'copy' && confirmDialog.copyId) {
-      const copy = books.find((book) => book.id === confirmDialog.copyId);
+        setDetailGroup(null);
+        setSuccessMsg(`"${confirmDialog.title}" berhasil dihapus!`);
+      } else if (confirmDialog.type === 'copy' && confirmDialog.copyId) {
+        const copy = books.find((book) => book.id === confirmDialog.copyId);
 
-      setBooks(books.filter((book) => book.id !== confirmDialog.copyId));
-      setSuccessMsg(`Eksemplar ${copy?.number} berhasil dihapus!`);
+        const response = await fetch(
+          `/api/book-copies/${confirmDialog.copyId}`,
+          {
+            method: 'DELETE',
+            headers: {
+              Accept: 'application/json',
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            await getApiErrorMessage(response, 'Gagal menghapus eksemplar.')
+          );
+        }
+
+        setSuccessMsg(`Eksemplar ${copy?.number} berhasil dihapus!`);
+      }
+
+      setConfirmDialog({
+        isOpen: false,
+        type: 'group',
+      });
+
+      await loadBooks();
+    } catch (error: any) {
+      setDeleteErrorMsg(error.message || 'Data tidak dapat dihapus.');
+    } finally {
+      setSaving(false);
     }
-
-    setConfirmDialog({
-      isOpen: false,
-      type: 'group',
-    });
   };
 
   const goToPreviousPage = () => {
@@ -390,7 +686,7 @@ export function Books() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-foreground mb-2">
             Data Buku
@@ -402,14 +698,27 @@ export function Books() {
 
         <button
           onClick={openAddBook}
-          className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg font-medium transition-all shadow-sm hover:shadow-md"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg font-medium transition-all shadow-sm hover:shadow-md"
         >
           <Plus className="w-5 h-5" />
           Tambah Buku
         </button>
       </div>
 
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-border">
+      {errorMsg && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
+      {loading && (
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-border text-sm text-muted-foreground">
+          Memuat data buku dari database...
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-border">
         <div className="mb-6 flex flex-col md:flex-row gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -417,7 +726,7 @@ export function Books() {
               type="text"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Cari buku berdasarkan judul, pengarang, atau kategori..."
+              placeholder="Cari buku berdasarkan judul, pengarang, kategori, atau nomor buku..."
               className="w-full pl-11 pr-4 py-3 bg-accent/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
             />
           </div>
@@ -425,7 +734,7 @@ export function Books() {
           <select
             value={categoryFilter}
             onChange={(event) => setCategoryFilter(event.target.value)}
-            className="px-4 py-3 bg-accent/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium min-w-[180px]"
+            className="w-full md:w-auto px-4 py-3 bg-accent/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium md:min-w-[180px]"
           >
             <option value="Semua">Semua Kategori</option>
             <option value="Fiksi">Fiksi</option>
@@ -437,7 +746,7 @@ export function Books() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[850px]">
             <thead>
               <tr className="border-b-2 border-border">
                 <th className="text-left py-4 px-4 text-sm font-semibold text-foreground">
@@ -470,7 +779,10 @@ export function Books() {
             <tbody>
               {paginatedGroupedBooks.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                  <td
+                    colSpan={8}
+                    className="py-12 text-center text-muted-foreground"
+                  >
                     {searchTerm || categoryFilter !== 'Semua'
                       ? 'Tidak ada hasil pencarian'
                       : 'Belum ada data buku'}
@@ -480,7 +792,7 @@ export function Books() {
 
               {paginatedGroupedBooks.map((group, index) => (
                 <tr
-                  key={`${group.title}||${group.author}`}
+                  key={group.bookMasterId}
                   className="border-b border-border last:border-0 hover:bg-accent/30 transition-colors"
                 >
                   <td className="py-4 px-4 text-muted-foreground">
@@ -546,7 +858,7 @@ export function Books() {
                       </button>
 
                       <button
-                        onClick={() => confirmDeleteGroup(group.title, group.author)}
+                        onClick={() => confirmDeleteGroup(group)}
                         className="p-2 hover:bg-destructive/10 text-destructive rounded-lg transition-colors"
                         title="Hapus semua eksemplar"
                       >
@@ -568,7 +880,7 @@ export function Books() {
           </p>
 
           {totalPages > 1 && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
               <button
                 onClick={goToPreviousPage}
                 disabled={currentPage === 1}
@@ -619,8 +931,8 @@ export function Books() {
         title={editingMasterBook ? 'Edit Info Buku' : 'Tambah Buku Baru'}
       >
         <form onSubmit={submitBookForm} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
               <label className="block text-sm font-medium text-foreground mb-2">
                 Judul Buku
               </label>
@@ -639,7 +951,7 @@ export function Books() {
               />
             </div>
 
-            <div className="col-span-2">
+            <div className="md:col-span-2">
               <label className="block text-sm font-medium text-foreground mb-2">
                 Pengarang
               </label>
@@ -743,7 +1055,7 @@ export function Books() {
                   />
                 </div>
 
-                <div className="col-span-2">
+                <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-foreground mb-2">
                     Tahun Pengadaan Eksemplar Pertama
                   </label>
@@ -767,20 +1079,30 @@ export function Books() {
             )}
           </div>
 
-          <div className="flex gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
             <button
               type="button"
               onClick={() => setShowBookModal(false)}
-              className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium"
+              disabled={saving}
+              className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed"
             >
               Batal
             </button>
 
             <button
               type="submit"
-              className="flex-1 px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg font-medium transition-all shadow-sm"
+              disabled={saving}
+              className={`flex-1 px-6 py-3 rounded-lg font-medium transition-all shadow-sm ${
+                saving
+                  ? 'bg-primary/60 text-white cursor-not-allowed'
+                  : 'bg-primary hover:bg-primary/90 text-white'
+              }`}
             >
-              {editingMasterBook ? 'Simpan Perubahan' : 'Tambah Buku'}
+              {saving
+                ? 'Menyimpan...'
+                : editingMasterBook
+                ? 'Simpan Perubahan'
+                : 'Tambah Buku'}
             </button>
           </div>
         </form>
@@ -836,19 +1158,23 @@ export function Books() {
                 <p className="text-2xl font-bold text-[#2d8659]">
                   {syncedDetail.tersedia}
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">Tersedia</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Tersedia
+                </p>
               </div>
 
               <div className="bg-yellow-50 rounded-lg p-3 text-center">
                 <p className="text-2xl font-bold text-yellow-700">
                   {syncedDetail.dipinjam}
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">Dipinjam</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Dipinjam
+                </p>
               </div>
             </div>
 
             <div className="border border-border rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 bg-accent/50 border-b border-border">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 bg-accent/50 border-b border-border">
                 <h4 className="font-semibold text-foreground text-sm">
                   Daftar Eksemplar
                 </h4>
@@ -863,7 +1189,7 @@ export function Books() {
                       status: 'Tersedia',
                     });
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-xs font-medium transition-colors"
+                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-xs font-medium transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   Tambah Eksemplar
@@ -875,7 +1201,7 @@ export function Books() {
                   <div key={copy.id}>
                     {editingCopyId === copy.id ? (
                       <div className="px-4 py-3 bg-primary/5 space-y-3">
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           <div>
                             <label className="block text-xs text-muted-foreground mb-1">
                               No. Buku
@@ -936,7 +1262,8 @@ export function Books() {
                           <button
                             type="button"
                             onClick={() => setEditingCopyId(null)}
-                            className="flex items-center gap-1 px-3 py-1.5 border border-border rounded-lg text-xs hover:bg-accent transition-colors"
+                            disabled={saving}
+                            className="flex items-center gap-1 px-3 py-1.5 border border-border rounded-lg text-xs hover:bg-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                           >
                             <X className="w-3.5 h-3.5" />
                             Batal
@@ -945,7 +1272,8 @@ export function Books() {
                           <button
                             type="button"
                             onClick={() => saveCopyEdit(copy.id)}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-primary text-white rounded-lg text-xs hover:bg-primary/90 transition-colors"
+                            disabled={saving}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-primary text-white rounded-lg text-xs hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                           >
                             <Check className="w-3.5 h-3.5" />
                             Simpan
@@ -953,17 +1281,19 @@ export function Books() {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-between px-4 py-3 hover:bg-accent/20 transition-colors">
-                        <div className="flex items-center gap-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 hover:bg-accent/20 transition-colors">
+                        <div className="flex flex-wrap items-center gap-3">
                           <span className="font-mono font-bold text-sm text-primary w-16">
                             {copy.number}
                           </span>
 
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            copy.status === 'Tersedia'
-                              ? 'bg-[#d4f1e3] text-[#2d8659]'
-                              : 'bg-yellow-100 text-yellow-700'
-                          }`}>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                              copy.status === 'Tersedia'
+                                ? 'bg-[#d4f1e3] text-[#2d8659]'
+                                : 'bg-yellow-100 text-yellow-700'
+                            }`}
+                          >
                             {copy.status}
                           </span>
 
@@ -1005,7 +1335,7 @@ export function Books() {
                       + Eksemplar Baru
                     </p>
 
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div>
                         <label className="block text-xs text-muted-foreground mb-1">
                           No. Buku
@@ -1071,7 +1401,8 @@ export function Books() {
                       <button
                         type="button"
                         onClick={() => setShowAddCopyForm(false)}
-                        className="flex items-center gap-1 px-3 py-1.5 border border-border rounded-lg text-xs hover:bg-accent transition-colors"
+                        disabled={saving}
+                        className="flex items-center gap-1 px-3 py-1.5 border border-border rounded-lg text-xs hover:bg-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         <X className="w-3.5 h-3.5" />
                         Batal
@@ -1079,10 +1410,11 @@ export function Books() {
 
                       <button
                         type="submit"
-                        className="flex items-center gap-1 px-3 py-1.5 bg-[#6bbf8d] hover:bg-[#5fb587] text-white rounded-lg text-xs font-medium transition-colors"
+                        disabled={saving}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-[#6bbf8d] hover:bg-[#5fb587] text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         <Check className="w-3.5 h-3.5" />
-                        Tambahkan
+                        {saving ? 'Menyimpan...' : 'Tambahkan'}
                       </button>
                     </div>
                   </form>
@@ -1090,7 +1422,7 @@ export function Books() {
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={() => {
                   setDetailGroup(null);
@@ -1161,7 +1493,9 @@ export function Books() {
           })
         }
         onConfirm={executeDelete}
-        title={confirmDialog.type === 'group' ? 'Hapus Buku' : 'Hapus Eksemplar'}
+        title={
+          confirmDialog.type === 'group' ? 'Hapus Buku' : 'Hapus Eksemplar'
+        }
         message={
           confirmDialog.type === 'group'
             ? `Yakin ingin menghapus semua eksemplar "${confirmDialog.title}"? Tindakan ini tidak dapat dibatalkan.`
@@ -1169,7 +1503,13 @@ export function Books() {
                 books.find((book) => book.id === confirmDialog.copyId)?.number
               }? Tindakan ini tidak dapat dibatalkan.`
         }
-        confirmText={confirmDialog.type === 'group' ? 'Hapus Semua' : 'Hapus'}
+        confirmText={
+          saving
+            ? 'Memproses...'
+            : confirmDialog.type === 'group'
+            ? 'Hapus Semua'
+            : 'Hapus'
+        }
         cancelText="Batal"
         type="danger"
       />

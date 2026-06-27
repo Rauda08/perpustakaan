@@ -1,5 +1,13 @@
-import { useState, useMemo, useEffect, type FormEvent } from 'react';
-import { Search, Plus, BookCopy, User, Calendar, X } from 'lucide-react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import {
+  AlertCircle,
+  BookCopy,
+  Calendar,
+  Plus,
+  Search,
+  User,
+  X,
+} from 'lucide-react';
 import { Modal } from '../components/Modal';
 
 type BorrowType = 'Harian' | 'Mingguan' | 'Tahunan' | 'Guru';
@@ -38,92 +46,7 @@ interface BorrowingItem {
 }
 
 const ITEMS_PER_PAGE = 10;
-
 const LOAN_TYPES: BorrowType[] = ['Harian', 'Mingguan', 'Tahunan', 'Guru'];
-
-const fallbackBorrowingData: BorrowingItem[] = [
-  {
-    id: 1,
-    memberId: 1,
-    memberName: 'Ahmad Fauzi',
-    memberType: 'Siswa',
-    memberClassNip: '2024001',
-    bookNumber: 'BK002',
-    bookTitle: 'Laskar Pelangi',
-    bookCategory: 'Fiksi',
-    bookStatus: 'Dipinjam',
-    borrowDate: '2026-05-01',
-    dueDate: '2026-05-15',
-    status: 'Aktif',
-    loanType: 'Mingguan',
-  },
-  {
-    id: 2,
-    memberId: 2,
-    memberName: 'Siti Nurhaliza',
-    memberType: 'Siswa',
-    memberClassNip: '2024002',
-    bookNumber: 'BK004',
-    bookTitle: 'Bumi Manusia',
-    bookCategory: 'Fiksi',
-    bookStatus: 'Dipinjam',
-    borrowDate: '2026-05-02',
-    dueDate: '2026-05-16',
-    status: 'Aktif',
-    loanType: 'Mingguan',
-  },
-  {
-    id: 3,
-    memberId: 4,
-    memberName: 'Dewi Permata',
-    memberType: 'Siswa',
-    memberClassNip: '2024003',
-    bookNumber: 'BK008',
-    bookTitle: 'Sang Pemimpi',
-    bookCategory: 'Fiksi',
-    bookStatus: 'Dipinjam',
-    borrowDate: '2026-05-03',
-    dueDate: '2026-05-17',
-    status: 'Aktif',
-    loanType: 'Mingguan',
-  },
-  {
-    id: 4,
-    memberId: 7,
-    memberName: 'Lina Marlina',
-    memberType: 'Siswa',
-    memberClassNip: '2024005',
-    bookNumber: 'BK007',
-    bookTitle: 'Perahu Kertas',
-    bookCategory: 'Fiksi',
-    bookStatus: 'Dipinjam',
-    borrowDate: '2026-04-28',
-    dueDate: '2026-05-12',
-    status: 'Terlambat',
-    loanType: 'Mingguan',
-  },
-];
-
-const fallbackMembersData: Member[] = [
-  { id: 1, name: 'Ahmad Fauzi', type: 'Siswa', classNip: '2024001' },
-  { id: 2, name: 'Siti Nurhaliza', type: 'Siswa', classNip: '2024002' },
-  { id: 3, name: 'Budi Santoso', type: 'Guru', classNip: '197501012000031002' },
-  { id: 4, name: 'Dewi Permata', type: 'Siswa', classNip: '2024003' },
-  { id: 5, name: 'Rina Kusuma', type: 'Siswa', classNip: '2024004' },
-  { id: 6, name: 'Agus Prasetyo', type: 'Guru', classNip: '198003152005021003' },
-  { id: 7, name: 'Lina Marlina', type: 'Siswa', classNip: '2024005' },
-];
-
-const fallbackBooksData: Book[] = [
-  { id: 1, number: 'BK001', title: 'Laskar Pelangi', category: 'Fiksi', status: 'Tersedia' },
-  { id: 2, number: 'BK002', title: 'Bumi Manusia', category: 'Fiksi', status: 'Tersedia' },
-  { id: 3, number: 'BK003', title: 'Negeri 5 Menara', category: 'Fiksi', status: 'Tersedia' },
-  { id: 4, number: 'BK004', title: 'Perahu Kertas', category: 'Fiksi', status: 'Tersedia' },
-  { id: 5, number: 'BK005', title: 'Sang Pemimpi', category: 'Fiksi', status: 'Dipinjam' },
-  { id: 6, number: 'BK006', title: 'Filosofi Kopi', category: 'Fiksi', status: 'Tersedia' },
-  { id: 7, number: 'BK007', title: 'Ayat-Ayat Cinta', category: 'Religi', status: 'Tersedia' },
-  { id: 8, number: 'BK008', title: 'Matematika Kelas X', category: 'Pelajaran', status: 'Tersedia' },
-];
 
 const getTodayDate = () => {
   const today = new Date();
@@ -179,6 +102,8 @@ const extractArray = (payload: any): any[] => {
   if (Array.isArray(data?.borrowings)) return data.borrowings;
   if (Array.isArray(data?.members)) return data.members;
   if (Array.isArray(data?.books)) return data.books;
+  if (Array.isArray(data?.bookMasters)) return data.bookMasters;
+  if (Array.isArray(data?.book_masters)) return data.book_masters;
   if (Array.isArray(data?.bookCopies)) return data.bookCopies;
   if (Array.isArray(data?.book_copies)) return data.book_copies;
 
@@ -188,18 +113,18 @@ const extractArray = (payload: any): any[] => {
 const fetchApiArray = async (urls: string[]) => {
   for (const url of urls) {
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: {
+          Accept: 'application/json',
+        },
+      });
 
       if (!response.ok) {
         continue;
       }
 
       const result = await response.json();
-      const data = extractArray(result);
-
-      if (Array.isArray(data)) {
-        return data;
-      }
+      return extractArray(result);
     } catch {
       continue;
     }
@@ -208,12 +133,33 @@ const fetchApiArray = async (urls: string[]) => {
   return [];
 };
 
+const getApiErrorMessage = async (response: Response, fallback: string) => {
+  const result = await response.json().catch(() => null);
+
+  return (
+    result?.message ||
+    result?.errors?.member_id?.[0] ||
+    result?.errors?.book_copy_id?.[0] ||
+    result?.errors?.borrow_date?.[0] ||
+    result?.errors?.due_date?.[0] ||
+    result?.errors?.loan_type?.[0] ||
+    result?.errors?.status?.[0] ||
+    result?.errors?.return_date?.[0] ||
+    result?.errors?.penalty_type?.[0] ||
+    result?.errors?.penalty_book_title?.[0] ||
+    result?.errors?.notes?.[0] ||
+    fallback
+  );
+};
+
 const normalizeMember = (item: any): Member => {
   return {
     id: Number(item.id),
     name: item.name ?? '-',
     type: item.type ?? 'Siswa',
-    classNip: item.classNip ?? item.class_nip ?? item.nis ?? item.nip ?? '-',
+    classNip: String(
+      item.classNip ?? item.class_nip ?? item.nis ?? item.nip ?? '-'
+    ),
   };
 };
 
@@ -256,6 +202,8 @@ const normalizeBorrowing = (item: any): BorrowingItem => {
       item.bookCopy?.title ??
       item.book_copy?.title ??
       item.bookCopy?.bookMaster?.title ??
+      item.bookCopy?.book_master?.title ??
+      item.book_copy?.bookMaster?.title ??
       item.book_copy?.book_master?.title ??
       item.book_master?.title ??
       '-',
@@ -265,6 +213,8 @@ const normalizeBorrowing = (item: any): BorrowingItem => {
       item.bookCopy?.category ??
       item.book_copy?.category ??
       item.bookCopy?.bookMaster?.category ??
+      item.bookCopy?.book_master?.category ??
+      item.book_copy?.bookMaster?.category ??
       item.book_copy?.book_master?.category ??
       item.book_master?.category ??
       '-',
@@ -292,50 +242,68 @@ const normalizeBorrowing = (item: any): BorrowingItem => {
   };
 };
 
-const normalizeBook = (item: any): Book => {
-  return {
-    id: Number(item.id),
-    number: item.number ?? item.book_number ?? item.code ?? '-',
-    title:
-      item.title ??
-      item.bookTitle ??
-      item.book_title ??
-      item.bookMaster?.title ??
-      item.book_master?.title ??
-      '-',
-    category:
-      item.category ??
-      item.bookCategory ??
-      item.book_category ??
-      item.bookMaster?.category ??
-      item.book_master?.category ??
-      '-',
-    status: item.status ?? 'Tersedia',
-  };
-};
-
 const normalizeBooks = (items: any[]): Book[] => {
   const books: Book[] = [];
 
   items.forEach((item) => {
     const copies = item.copies ?? item.bookCopies ?? item.book_copies;
 
+    const masterTitle =
+      item.title ??
+      item.bookTitle ??
+      item.book_title ??
+      item.bookMaster?.title ??
+      item.book_master?.title ??
+      '-';
+
+    const masterCategory =
+      item.category ??
+      item.bookCategory ??
+      item.book_category ??
+      item.bookMaster?.category ??
+      item.book_master?.category ??
+      '-';
+
     if (Array.isArray(copies)) {
       copies.forEach((copy: any) => {
         books.push({
           id: Number(copy.id),
-          number: copy.number ?? copy.book_number ?? '-',
-          title: item.title ?? copy.title ?? '-',
-          category: item.category ?? copy.category ?? '-',
+          number: String(copy.number ?? copy.book_number ?? '-'),
+          title:
+            item.title ??
+            copy.title ??
+            copy.bookTitle ??
+            copy.book_title ??
+            copy.bookMaster?.title ??
+            copy.book_master?.title ??
+            masterTitle,
+          category:
+            item.category ??
+            copy.category ??
+            copy.bookCategory ??
+            copy.book_category ??
+            copy.bookMaster?.category ??
+            copy.book_master?.category ??
+            masterCategory,
           status: copy.status ?? 'Tersedia',
         });
       });
-    } else {
-      books.push(normalizeBook(item));
+
+      return;
+    }
+
+    if (item.number || item.bookNumber || item.book_number) {
+      books.push({
+        id: Number(item.id),
+        number: String(item.number ?? item.bookNumber ?? item.book_number ?? '-'),
+        title: masterTitle,
+        category: masterCategory,
+        status: item.status ?? 'Tersedia',
+      });
     }
   });
 
-  return books;
+  return books.filter((book) => book.id && book.number !== '-');
 };
 
 export function Borrowing() {
@@ -343,12 +311,15 @@ export function Borrowing() {
   const [loanTypeFilter, setLoanTypeFilter] = useState('Semua');
   const [showModal, setShowModal] = useState(false);
   const [showPenaltyModal, setShowPenaltyModal] = useState(false);
-  const [selectedBorrowingForReturn, setSelectedBorrowingForReturn] = useState<BorrowingItem | null>(null);
+  const [selectedBorrowingForReturn, setSelectedBorrowingForReturn] =
+    useState<BorrowingItem | null>(null);
 
-  const [borrowings, setBorrowings] = useState<BorrowingItem[]>(fallbackBorrowingData);
-  const [members, setMembers] = useState<Member[]>(fallbackMembersData);
-  const [books, setBooks] = useState<Book[]>(fallbackBooksData);
+  const [borrowings, setBorrowings] = useState<BorrowingItem[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [books, setBooks] = useState<Book[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const [memberSearch, setMemberSearch] = useState('');
   const [bookSearch, setBookSearch] = useState('');
@@ -369,27 +340,21 @@ export function Borrowing() {
 
   const loadData = async () => {
     setIsLoading(true);
+    setErrorMsg('');
 
     try {
-      const [borrowingsResponse, membersResponse, booksResponse] = await Promise.all([
-        fetchApiArray(['/api/borrowings']),
-        fetchApiArray(['/api/members']),
-        fetchApiArray(['/api/book-copies', '/api/books']),
-      ]);
+      const [borrowingsResponse, membersResponse, booksResponse] =
+        await Promise.all([
+          fetchApiArray(['/api/borrowings/active', '/api/borrowings']),
+          fetchApiArray(['/api/members']),
+          fetchApiArray(['/api/books']),
+        ]);
 
-      if (borrowingsResponse.length > 0) {
-        setBorrowings(borrowingsResponse.map(normalizeBorrowing));
-      }
-
-      if (membersResponse.length > 0) {
-        setMembers(membersResponse.map(normalizeMember));
-      }
-
-      if (booksResponse.length > 0) {
-        setBooks(normalizeBooks(booksResponse));
-      }
-    } catch (error) {
-      console.error('Gagal mengambil data peminjaman:', error);
+      setBorrowings(borrowingsResponse.map(normalizeBorrowing));
+      setMembers(membersResponse.map(normalizeMember));
+      setBooks(normalizeBooks(booksResponse));
+    } catch (error: any) {
+      setErrorMsg(error.message || 'Gagal mengambil data peminjaman.');
     } finally {
       setIsLoading(false);
     }
@@ -407,10 +372,12 @@ export function Borrowing() {
 
   const filteredBorrowing = useMemo(() => {
     return activeBorrowings.filter((item) => {
+      const keyword = searchTerm.toLowerCase();
+
       const matchesSearch =
-        item.memberName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.bookTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.bookNumber.toLowerCase().includes(searchTerm.toLowerCase());
+        item.memberName.toLowerCase().includes(keyword) ||
+        item.bookTitle.toLowerCase().includes(keyword) ||
+        item.bookNumber.toLowerCase().includes(keyword);
 
       const matchesLoanType =
         loanTypeFilter === 'Semua' || item.loanType === loanTypeFilter;
@@ -431,23 +398,40 @@ export function Borrowing() {
   const startItem =
     filteredBorrowing.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
 
-  const endItem = Math.min(currentPage * ITEMS_PER_PAGE, filteredBorrowing.length);
+  const endItem = Math.min(
+    currentPage * ITEMS_PER_PAGE,
+    filteredBorrowing.length
+  );
 
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, loanTypeFilter]);
 
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+
+    if (totalPages === 0 && currentPage !== 1) {
+      setCurrentPage(1);
+    }
+  }, [totalPages, currentPage]);
+
   const filteredMembers = members.filter((member) => {
+    const keyword = memberSearch.toLowerCase();
+
     return (
-      member.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
-      member.classNip.toLowerCase().includes(memberSearch.toLowerCase())
+      member.name.toLowerCase().includes(keyword) ||
+      member.classNip.toLowerCase().includes(keyword)
     );
   });
 
   const filteredBooks = books.filter((book) => {
+    const keyword = bookSearch.toLowerCase();
+
     return (
-      book.title.toLowerCase().includes(bookSearch.toLowerCase()) ||
-      book.number.toLowerCase().includes(bookSearch.toLowerCase())
+      book.title.toLowerCase().includes(keyword) ||
+      book.number.toLowerCase().includes(keyword)
     );
   });
 
@@ -458,11 +442,13 @@ export function Borrowing() {
   };
 
   const handleBookSelect = (book: Book) => {
-    if (book.status === 'Tersedia') {
-      setSelectedBook(book);
-      setBookSearch(book.title);
-      setShowBookDropdown(false);
+    if (book.status !== 'Tersedia') {
+      return;
     }
+
+    setSelectedBook(book);
+    setBookSearch(`${book.title} (${book.number})`);
+    setShowBookDropdown(false);
   };
 
   const handleBorrowTypeChange = (type: BorrowType) => {
@@ -486,6 +472,8 @@ export function Borrowing() {
     setSelectedBook(null);
     setMemberSearch('');
     setBookSearch('');
+    setShowMemberDropdown(false);
+    setShowBookDropdown(false);
     setFormData(getInitialFormData());
   };
 
@@ -493,6 +481,7 @@ export function Borrowing() {
     event.preventDefault();
 
     if (!selectedMember || !selectedBook) {
+      alert('Pilih anggota dan buku terlebih dahulu.');
       return;
     }
 
@@ -505,7 +494,8 @@ export function Borrowing() {
       status: 'Aktif',
     };
 
-    let newBorrowing: BorrowingItem | null = null;
+    setIsSaving(true);
+    setErrorMsg('');
 
     try {
       const response = await fetch('/api/borrowings', {
@@ -517,49 +507,24 @@ export function Borrowing() {
         body: JSON.stringify(payload),
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        newBorrowing = normalizeBorrowing(result.data ?? result);
+      if (!response.ok) {
+        throw new Error(
+          await getApiErrorMessage(response, 'Gagal menyimpan peminjaman.')
+        );
       }
-    } catch (error) {
-      console.error('Gagal menyimpan peminjaman ke backend:', error);
+
+      alert(
+        `Peminjaman berhasil dibuat!\nAnggota: ${selectedMember.name}\nBuku: ${selectedBook.title}`
+      );
+
+      handleReset();
+      setShowModal(false);
+      await loadData();
+    } catch (error: any) {
+      alert(error.message || 'Terjadi kesalahan saat menyimpan peminjaman.');
+    } finally {
+      setIsSaving(false);
     }
-
-    if (!newBorrowing) {
-      newBorrowing = {
-        id: Date.now(),
-        memberId: selectedMember.id,
-        memberName: selectedMember.name,
-        memberType: selectedMember.type,
-        memberClassNip: selectedMember.classNip,
-        bookCopyId: selectedBook.id,
-        bookNumber: selectedBook.number,
-        bookTitle: selectedBook.title,
-        bookCategory: selectedBook.category,
-        bookStatus: 'Dipinjam',
-        borrowDate: formData.borrowDate,
-        dueDate: formData.returnDate,
-        status: 'Aktif',
-        loanType: formData.borrowType,
-      };
-    }
-
-    setBorrowings((previous) => [newBorrowing!, ...previous]);
-
-    setBooks((previous) =>
-      previous.map((book) =>
-        book.id === selectedBook.id
-          ? { ...book, status: 'Dipinjam' }
-          : book
-      )
-    );
-
-    alert(
-      `Peminjaman berhasil dibuat!\nAnggota: ${selectedMember.name}\nBuku: ${selectedBook.title}`
-    );
-
-    handleReset();
-    setShowModal(false);
   };
 
   const handleReturn = (borrowing: BorrowingItem) => {
@@ -586,41 +551,40 @@ export function Borrowing() {
       notes: penaltyData.notes,
     };
 
+    setIsSaving(true);
+    setErrorMsg('');
+
     try {
-      await fetch(`/api/borrowings/${selectedBorrowingForReturn.id}/return`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-    } catch (error) {
-      console.error('Gagal memproses pengembalian ke backend:', error);
+      const response = await fetch(
+        `/api/borrowings/${selectedBorrowingForReturn.id}/return`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          await getApiErrorMessage(response, 'Gagal memproses pengembalian.')
+        );
+      }
+
+      alert(
+        `Pengembalian berhasil!\nAnggota: ${selectedBorrowingForReturn.memberName}\nBuku: ${selectedBorrowingForReturn.bookTitle}\nSanksi: ${penaltyData.type} (${penaltyData.bookTitle || '-'})\nCatatan: ${penaltyData.notes || '-'}`
+      );
+
+      setShowPenaltyModal(false);
+      setSelectedBorrowingForReturn(null);
+      await loadData();
+    } catch (error: any) {
+      alert(error.message || 'Terjadi kesalahan saat memproses pengembalian.');
+    } finally {
+      setIsSaving(false);
     }
-
-    setBorrowings((previous) =>
-      previous.map((item) =>
-        item.id === selectedBorrowingForReturn.id
-          ? { ...item, status: 'Dikembalikan' }
-          : item
-      )
-    );
-
-    setBooks((previous) =>
-      previous.map((book) =>
-        book.number === selectedBorrowingForReturn.bookNumber
-          ? { ...book, status: 'Tersedia' }
-          : book
-      )
-    );
-
-    alert(
-      `Pengembalian berhasil!\nAnggota: ${selectedBorrowingForReturn.memberName}\nBuku: ${selectedBorrowingForReturn.bookTitle}\nSanksi: ${penaltyData.type} (${penaltyData.bookTitle || '-'})\nCatatan: ${penaltyData.notes || '-'}`
-    );
-
-    setShowPenaltyModal(false);
-    setSelectedBorrowingForReturn(null);
   };
 
   const goToPreviousPage = () => {
@@ -633,7 +597,7 @@ export function Borrowing() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-foreground mb-2">
             Peminjaman Buku
@@ -645,14 +609,21 @@ export function Borrowing() {
 
         <button
           onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg font-medium transition-all shadow-sm hover:shadow-md"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg font-medium transition-all shadow-sm hover:shadow-md"
         >
           <Plus className="w-5 h-5" />
           Peminjaman Baru
         </button>
       </div>
 
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-border">
+      {errorMsg && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-border">
         <h3 className="font-semibold text-foreground mb-5">
           Daftar Peminjaman Aktif
         </h3>
@@ -664,7 +635,7 @@ export function Borrowing() {
               type="text"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Cari berdasarkan nama anggota atau judul buku..."
+              placeholder="Cari berdasarkan nama anggota, judul buku, atau nomor buku..."
               className="w-full pl-11 pr-4 py-3 bg-accent/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
             />
           </div>
@@ -672,7 +643,7 @@ export function Borrowing() {
           <select
             value={loanTypeFilter}
             onChange={(event) => setLoanTypeFilter(event.target.value)}
-            className="md:w-52 px-4 py-3 bg-accent/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium"
+            className="w-full md:w-52 px-4 py-3 bg-accent/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium"
           >
             <option value="Semua">Semua Jenis</option>
             <option value="Harian">Harian</option>
@@ -683,7 +654,7 @@ export function Borrowing() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[1000px]">
             <thead>
               <tr className="border-b-2 border-border">
                 <th className="text-left py-4 px-4 text-sm font-semibold text-foreground">
@@ -716,7 +687,10 @@ export function Borrowing() {
             <tbody>
               {paginatedBorrowing.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                  <td
+                    colSpan={8}
+                    className="py-12 text-center text-muted-foreground"
+                  >
                     {isLoading
                       ? 'Memuat data peminjaman...'
                       : searchTerm || loanTypeFilter !== 'Semua'
@@ -739,13 +713,18 @@ export function Borrowing() {
                     <span className="font-medium text-foreground">
                       {item.memberName}
                     </span>
+                    <p className="text-xs text-muted-foreground font-mono">
+                      {item.memberClassNip}
+                    </p>
                   </td>
 
                   <td className="py-4 px-4">
                     <div className="flex items-center gap-2">
                       <BookCopy className="w-4 h-4 text-primary" />
                       <div>
-                        <span className="text-foreground">{item.bookTitle}</span>
+                        <span className="text-foreground">
+                          {item.bookTitle}
+                        </span>
                         <p className="text-xs text-muted-foreground font-mono">
                           {item.bookNumber}
                         </p>
@@ -754,15 +733,17 @@ export function Borrowing() {
                   </td>
 
                   <td className="py-4 px-4">
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      item.loanType === 'Harian'
-                        ? 'bg-[#fff3cc] text-[#9d7a2f]'
-                        : item.loanType === 'Mingguan'
-                        ? 'bg-[#e8f3ff] text-[#5a7ba0]'
-                        : item.loanType === 'Tahunan'
-                        ? 'bg-[#f5c842]/20 text-[#9d7a2f]'
-                        : 'bg-[#d4f1e3] text-[#2d8659]'
-                    }`}>
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        item.loanType === 'Harian'
+                          ? 'bg-[#fff3cc] text-[#9d7a2f]'
+                          : item.loanType === 'Mingguan'
+                          ? 'bg-[#e8f3ff] text-[#5a7ba0]'
+                          : item.loanType === 'Tahunan'
+                          ? 'bg-[#f5c842]/20 text-[#9d7a2f]'
+                          : 'bg-[#d4f1e3] text-[#2d8659]'
+                      }`}
+                    >
                       {item.loanType ?? '-'}
                     </span>
                   </td>
@@ -776,11 +757,13 @@ export function Borrowing() {
                   </td>
 
                   <td className="py-4 px-4">
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      item.status === 'Aktif'
-                        ? 'bg-[#e8f3ff] text-[#5a7ba0]'
-                        : 'bg-red-100 text-red-700'
-                    }`}>
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        item.status === 'Aktif'
+                          ? 'bg-[#e8f3ff] text-[#5a7ba0]'
+                          : 'bg-red-100 text-red-700'
+                      }`}
+                    >
                       {item.status}
                     </span>
                   </td>
@@ -807,7 +790,7 @@ export function Borrowing() {
           </p>
 
           {totalPages > 1 && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
               <button
                 onClick={goToPreviousPage}
                 disabled={currentPage === 1}
@@ -820,19 +803,21 @@ export function Borrowing() {
                 Sebelumnya
               </button>
 
-              {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
-                <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  className={`px-4 py-2 border rounded-lg transition-colors ${
-                    currentPage === page
-                      ? 'bg-primary text-white border-primary'
-                      : 'border-border hover:bg-accent'
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map(
+                (page) => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-4 py-2 border rounded-lg transition-colors ${
+                      currentPage === page
+                        ? 'bg-primary text-white border-primary'
+                        : 'border-border hover:bg-accent'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                )
+              )}
 
               <button
                 onClick={goToNextPage}
@@ -879,14 +864,15 @@ export function Borrowing() {
                     onChange={(event) => {
                       setMemberSearch(event.target.value);
                       setShowMemberDropdown(true);
+                      setSelectedMember(null);
                     }}
                     onFocus={() => setShowMemberDropdown(true)}
-                    className="w-full pl-11 pr-4 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                    placeholder="Ketik nama atau kelas/NIP anggota..."
+                    className="w-full pl-11 pr-10 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    placeholder="Ketik nama atau NIS/NIP anggota..."
                     required
                   />
 
-                  {selectedMember && (
+                  {memberSearch && (
                     <button
                       type="button"
                       onClick={() => {
@@ -901,25 +887,32 @@ export function Borrowing() {
                 </div>
 
                 {showMemberDropdown && memberSearch && filteredMembers.length > 0 && (
-                  <div className="absolute z-10 w-full mt-2 bg-white border border-border rounded-lg shadow-lg">
+                  <div className="absolute z-10 w-full mt-2 bg-white border border-border rounded-lg shadow-lg max-h-72 overflow-y-auto">
                     {filteredMembers.map((member) => (
                       <button
                         key={member.id}
                         type="button"
+                        onMouseDown={(event) => event.preventDefault()}
                         onClick={() => handleMemberSelect(member)}
                         className="w-full px-4 py-3 text-left hover:bg-accent transition-colors border-b border-border last:border-0"
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-3">
                           <div>
-                            <p className="font-medium text-foreground">{member.name}</p>
-                            <p className="text-sm text-muted-foreground">{member.classNip}</p>
+                            <p className="font-medium text-foreground">
+                              {member.name}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {member.classNip}
+                            </p>
                           </div>
 
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            member.type === 'Guru'
-                              ? 'bg-[#fff3cc] text-[#9d7a2f]'
-                              : 'bg-[#e8f3ff] text-[#5a7ba0]'
-                          }`}>
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              member.type === 'Guru'
+                                ? 'bg-[#fff3cc] text-[#9d7a2f]'
+                                : 'bg-[#e8f3ff] text-[#5a7ba0]'
+                            }`}
+                          >
                             {member.type}
                           </span>
                         </div>
@@ -930,26 +923,36 @@ export function Borrowing() {
               </div>
 
               {selectedMember && (
-                <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">No Anggota</p>
+                    <p className="text-sm text-muted-foreground mb-1">
+                      No Anggota
+                    </p>
                     <p className="font-medium text-foreground">
                       #{selectedMember.id.toString().padStart(4, '0')}
                     </p>
                   </div>
 
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">Nama Anggota</p>
-                    <p className="font-medium text-foreground">{selectedMember.name}</p>
+                    <p className="text-sm text-muted-foreground mb-1">
+                      Nama Anggota
+                    </p>
+                    <p className="font-medium text-foreground">
+                      {selectedMember.name}
+                    </p>
                   </div>
 
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">Jenis Anggota</p>
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                      selectedMember.type === 'Guru'
-                        ? 'bg-[#fff3cc] text-[#9d7a2f]'
-                        : 'bg-[#e8f3ff] text-[#5a7ba0]'
-                    }`}>
+                    <p className="text-sm text-muted-foreground mb-1">
+                      Jenis Anggota
+                    </p>
+                    <span
+                      className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
+                        selectedMember.type === 'Guru'
+                          ? 'bg-[#fff3cc] text-[#9d7a2f]'
+                          : 'bg-[#e8f3ff] text-[#5a7ba0]'
+                      }`}
+                    >
                       {selectedMember.type}
                     </span>
                   </div>
@@ -987,14 +990,15 @@ export function Borrowing() {
                     onChange={(event) => {
                       setBookSearch(event.target.value);
                       setShowBookDropdown(true);
+                      setSelectedBook(null);
                     }}
                     onFocus={() => setShowBookDropdown(true)}
-                    className="w-full pl-11 pr-4 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    className="w-full pl-11 pr-10 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     placeholder="Ketik judul atau nomor buku..."
                     required
                   />
 
-                  {selectedBook && (
+                  {bookSearch && (
                     <button
                       type="button"
                       onClick={() => {
@@ -1009,11 +1013,12 @@ export function Borrowing() {
                 </div>
 
                 {showBookDropdown && bookSearch && filteredBooks.length > 0 && (
-                  <div className="absolute z-10 w-full mt-2 bg-white border border-border rounded-lg shadow-lg">
+                  <div className="absolute z-10 w-full mt-2 bg-white border border-border rounded-lg shadow-lg max-h-72 overflow-y-auto">
                     {filteredBooks.map((book) => (
                       <button
                         key={book.id}
                         type="button"
+                        onMouseDown={(event) => event.preventDefault()}
                         onClick={() => handleBookSelect(book)}
                         disabled={book.status !== 'Tersedia'}
                         className={`w-full px-4 py-3 text-left border-b border-border last:border-0 ${
@@ -1022,19 +1027,23 @@ export function Borrowing() {
                             : 'opacity-50 cursor-not-allowed'
                         }`}
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-3">
                           <div className="flex-1">
-                            <p className="font-medium text-foreground">{book.title}</p>
+                            <p className="font-medium text-foreground">
+                              {book.title}
+                            </p>
                             <p className="text-sm text-muted-foreground">
                               {book.number} • {book.category}
                             </p>
                           </div>
 
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            book.status === 'Tersedia'
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-yellow-100 text-yellow-700'
-                          }`}>
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              book.status === 'Tersedia'
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-yellow-100 text-yellow-700'
+                            }`}
+                          >
                             {book.status}
                           </span>
                         </div>
@@ -1045,28 +1054,38 @@ export function Borrowing() {
               </div>
 
               {selectedBook && (
-                <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">Nomor Buku</p>
+                    <p className="text-sm text-muted-foreground mb-1">
+                      Nomor Buku
+                    </p>
                     <p className="font-medium text-foreground font-mono">
                       {selectedBook.number}
                     </p>
                   </div>
 
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">Judul Buku</p>
-                    <p className="font-medium text-foreground">{selectedBook.title}</p>
+                    <p className="text-sm text-muted-foreground mb-1">
+                      Judul Buku
+                    </p>
+                    <p className="font-medium text-foreground">
+                      {selectedBook.title}
+                    </p>
                   </div>
 
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">Kategori</p>
+                    <p className="text-sm text-muted-foreground mb-1">
+                      Kategori
+                    </p>
                     <span className="inline-block px-3 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
                       {selectedBook.category}
                     </span>
                   </div>
 
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">Status Buku</p>
+                    <p className="text-sm text-muted-foreground mb-1">
+                      Status Buku
+                    </p>
                     <span className="inline-block px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
                       {selectedBook.status}
                     </span>
@@ -1083,7 +1102,7 @@ export function Borrowing() {
             </h3>
 
             <div className="space-y-4 bg-muted/30 p-4 rounded-lg">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">
                     Tanggal Peminjaman
@@ -1091,7 +1110,9 @@ export function Borrowing() {
                   <input
                     type="date"
                     value={formData.borrowDate}
-                    onChange={(event) => handleBorrowDateChange(event.target.value)}
+                    onChange={(event) =>
+                      handleBorrowDateChange(event.target.value)
+                    }
                     className="w-full px-4 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     required
                   />
@@ -1146,14 +1167,15 @@ export function Borrowing() {
             </div>
           </div>
 
-          <div className="flex gap-3 pt-4">
+          <div className="flex flex-col sm:flex-row gap-3 pt-4">
             <button
               type="button"
               onClick={() => {
                 setShowModal(false);
                 handleReset();
               }}
-              className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium"
+              disabled={isSaving}
+              className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed"
             >
               Batal
             </button>
@@ -1161,17 +1183,18 @@ export function Borrowing() {
             <button
               type="button"
               onClick={handleReset}
-              className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium"
+              disabled={isSaving}
+              className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed"
             >
               Reset
             </button>
 
             <button
               type="submit"
-              disabled={!selectedMember || !selectedBook}
+              disabled={!selectedMember || !selectedBook || isSaving}
               className="flex-1 px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg font-medium transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Simpan
+              {isSaving ? 'Menyimpan...' : 'Simpan'}
             </button>
           </div>
         </form>
@@ -1184,7 +1207,7 @@ export function Borrowing() {
       >
         {selectedBorrowingForReturn && (
           <form onSubmit={handlePenaltySubmit} className="space-y-5">
-            <div className="bg-muted/40 border border-border rounded-xl p-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <div className="bg-muted/40 border border-border rounded-xl p-4 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
               <div>
                 <span className="text-muted-foreground">Anggota</span>
                 <p className="font-semibold text-foreground">
@@ -1194,7 +1217,9 @@ export function Borrowing() {
 
               <div>
                 <span className="text-muted-foreground">
-                  {selectedBorrowingForReturn.memberType === 'Siswa' ? 'NIS' : 'NIP'}
+                  {selectedBorrowingForReturn.memberType === 'Siswa'
+                    ? 'NIS'
+                    : 'NIP'}
                 </span>
                 <p className="font-semibold text-foreground font-mono">
                   {selectedBorrowingForReturn.memberClassNip}
@@ -1224,11 +1249,13 @@ export function Borrowing() {
 
               <div>
                 <span className="text-muted-foreground">Status</span>
-                <span className={`inline-block mt-1 px-3 py-0.5 rounded-full text-xs font-semibold ${
-                  selectedBorrowingForReturn.status === 'Terlambat'
-                    ? 'bg-red-100 text-red-700'
-                    : 'bg-[#e8f3ff] text-[#5a7ba0]'
-                }`}>
+                <span
+                  className={`inline-block mt-1 px-3 py-0.5 rounded-full text-xs font-semibold ${
+                    selectedBorrowingForReturn.status === 'Terlambat'
+                      ? 'bg-red-100 text-red-700'
+                      : 'bg-[#e8f3ff] text-[#5a7ba0]'
+                  }`}
+                >
                   {selectedBorrowingForReturn.status}
                 </span>
               </div>
@@ -1241,10 +1268,12 @@ export function Borrowing() {
                 </p>
                 <ul className="text-sm text-red-700 list-disc ml-4 space-y-0.5">
                   <li>
-                    <strong>Buku Donasi</strong> — terlambat: bawa 1 buku bebas untuk perpustakaan
+                    <strong>Buku Donasi</strong> — terlambat: bawa 1 buku bebas
+                    untuk perpustakaan
                   </li>
                   <li>
-                    <strong>Buku Pengganti</strong> — hilang/rusak: ganti buku yang sama persis
+                    <strong>Buku Pengganti</strong> — hilang/rusak: ganti buku
+                    yang sama persis
                   </li>
                 </ul>
               </div>
@@ -1263,10 +1292,15 @@ export function Borrowing() {
                     Jenis Sanksi
                   </label>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
                       type="button"
-                      onClick={() => setPenaltyData({ ...penaltyData, type: 'Buku Donasi' })}
+                      onClick={() =>
+                        setPenaltyData({
+                          ...penaltyData,
+                          type: 'Buku Donasi',
+                        })
+                      }
                       className={`px-4 py-3 rounded-lg text-left transition-all border ${
                         penaltyData.type === 'Buku Donasi'
                           ? 'bg-primary text-white border-primary shadow-sm'
@@ -1274,18 +1308,25 @@ export function Borrowing() {
                       }`}
                     >
                       <p className="font-semibold text-sm">Buku Donasi</p>
-                      <p className={`text-xs mt-0.5 ${
-                        penaltyData.type === 'Buku Donasi'
-                          ? 'opacity-80'
-                          : 'text-muted-foreground'
-                      }`}>
+                      <p
+                        className={`text-xs mt-0.5 ${
+                          penaltyData.type === 'Buku Donasi'
+                            ? 'opacity-80'
+                            : 'text-muted-foreground'
+                        }`}
+                      >
                         Terlambat mengembalikan
                       </p>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setPenaltyData({ ...penaltyData, type: 'Buku Pengganti' })}
+                      onClick={() =>
+                        setPenaltyData({
+                          ...penaltyData,
+                          type: 'Buku Pengganti',
+                        })
+                      }
                       className={`px-4 py-3 rounded-lg text-left transition-all border ${
                         penaltyData.type === 'Buku Pengganti'
                           ? 'bg-primary text-white border-primary shadow-sm'
@@ -1293,11 +1334,13 @@ export function Borrowing() {
                       }`}
                     >
                       <p className="font-semibold text-sm">Buku Pengganti</p>
-                      <p className={`text-xs mt-0.5 ${
-                        penaltyData.type === 'Buku Pengganti'
-                          ? 'opacity-80'
-                          : 'text-muted-foreground'
-                      }`}>
+                      <p
+                        className={`text-xs mt-0.5 ${
+                          penaltyData.type === 'Buku Pengganti'
+                            ? 'opacity-80'
+                            : 'text-muted-foreground'
+                        }`}
+                      >
                         Buku hilang / rusak
                       </p>
                     </button>
@@ -1306,14 +1349,20 @@ export function Borrowing() {
 
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">
-                    Judul Buku {penaltyData.type === 'Buku Donasi' ? 'Donasi' : 'Pengganti'}
+                    Judul Buku{' '}
+                    {penaltyData.type === 'Buku Donasi'
+                      ? 'Donasi'
+                      : 'Pengganti'}
                   </label>
 
                   <input
                     type="text"
                     value={penaltyData.bookTitle}
                     onChange={(event) =>
-                      setPenaltyData({ ...penaltyData, bookTitle: event.target.value })
+                      setPenaltyData({
+                        ...penaltyData,
+                        bookTitle: event.target.value,
+                      })
                     }
                     className="w-full px-4 py-3 bg-white border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                     placeholder={
@@ -1338,7 +1387,10 @@ export function Borrowing() {
                   <textarea
                     value={penaltyData.notes}
                     onChange={(event) =>
-                      setPenaltyData({ ...penaltyData, notes: event.target.value })
+                      setPenaltyData({
+                        ...penaltyData,
+                        notes: event.target.value,
+                      })
                     }
                     rows={3}
                     className="w-full px-4 py-3 bg-white border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm resize-none"
@@ -1348,20 +1400,22 @@ export function Borrowing() {
               </div>
             </div>
 
-            <div className="flex gap-3 pt-1">
+            <div className="flex flex-col sm:flex-row gap-3 pt-1">
               <button
                 type="button"
                 onClick={() => setShowPenaltyModal(false)}
-                className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium text-sm"
+                disabled={isSaving}
+                className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium text-sm disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 Batal
               </button>
 
               <button
                 type="submit"
-                className="flex-1 px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg font-medium transition-all shadow-sm text-sm"
+                disabled={isSaving}
+                className="flex-1 px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg font-medium transition-all shadow-sm text-sm disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Proses Pengembalian
+                {isSaving ? 'Memproses...' : 'Proses Pengembalian'}
               </button>
             </div>
           </form>
