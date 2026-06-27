@@ -156,6 +156,9 @@ export function Members() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('Semua');
+  const [sortBy, setSortBy] = useState<
+    'id_desc' | 'id_asc' | 'name_asc' | 'name_desc'
+  >('id_desc');
   const [currentPage, setCurrentPage] = useState(1);
 
   const [showModal, setShowModal] = useState(false);
@@ -303,18 +306,38 @@ export function Members() {
     return records;
   }, [members, borrowings]);
 
-  const filteredMembers = members.filter((member) => {
-    const lowerSearch = searchTerm.toLowerCase();
+  const filteredMembers = members
+    .filter((member) => {
+      const lowerSearch = searchTerm.toLowerCase();
 
-    const matchesSearch =
-      member.name.toLowerCase().includes(lowerSearch) ||
-      member.classNip.toLowerCase().includes(lowerSearch) ||
-      member.type.toLowerCase().includes(lowerSearch);
+      const matchesSearch =
+        member.name.toLowerCase().includes(lowerSearch) ||
+        member.classNip.toLowerCase().includes(lowerSearch) ||
+        member.type.toLowerCase().includes(lowerSearch);
 
-    const matchesType = typeFilter === 'Semua' || member.type === typeFilter;
+      const matchesType = typeFilter === 'Semua' || member.type === typeFilter;
 
-    return matchesSearch && matchesType;
-  });
+      return matchesSearch && matchesType;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'id_desc') {
+        return b.id - a.id;
+      }
+
+      if (sortBy === 'id_asc') {
+        return a.id - b.id;
+      }
+
+      if (sortBy === 'name_asc') {
+        return a.name.localeCompare(b.name, 'id-ID');
+      }
+
+      if (sortBy === 'name_desc') {
+        return b.name.localeCompare(a.name, 'id-ID');
+      }
+
+      return 0;
+    });
 
   const totalPages = Math.ceil(filteredMembers.length / ITEMS_PER_PAGE);
 
@@ -330,7 +353,7 @@ export function Members() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, typeFilter]);
+  }, [searchTerm, typeFilter, sortBy]);
 
   useEffect(() => {
     if (totalPages > 0 && currentPage > totalPages) {
@@ -572,7 +595,7 @@ export function Members() {
             />
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex flex-col md:flex-row gap-3">
             <select
               value={typeFilter}
               onChange={(event) => setTypeFilter(event.target.value)}
@@ -581,6 +604,25 @@ export function Members() {
               <option value="Semua">Semua Jenis</option>
               <option value="Siswa">Siswa</option>
               <option value="Guru">Guru</option>
+            </select>
+
+            <select
+              value={sortBy}
+              onChange={(event) =>
+                setSortBy(
+                  event.target.value as
+                    | 'id_desc'
+                    | 'id_asc'
+                    | 'name_asc'
+                    | 'name_desc'
+                )
+              }
+              className="px-4 py-3 bg-accent/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium"
+            >
+              <option value="id_desc">No Anggota Terbaru</option>
+              <option value="id_asc">No Anggota Terlama</option>
+              <option value="name_asc">Nama A-Z</option>
+              <option value="name_desc">Nama Z-A</option>
             </select>
           </div>
         </div>

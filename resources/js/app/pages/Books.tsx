@@ -347,6 +347,22 @@ export function Books() {
     }
   });
 
+  groupedBooks.sort((a, b) =>
+    a.title.localeCompare(b.title, 'id-ID', {
+      sensitivity: 'base',
+      numeric: true,
+    })
+  );
+
+  groupedBooks.forEach((group) => {
+    group.copies.sort((a, b) =>
+      a.number.localeCompare(b.number, 'id-ID', {
+        sensitivity: 'base',
+        numeric: true,
+      })
+    );
+  });
+
   const totalPages = Math.ceil(groupedBooks.length / ITEMS_PER_PAGE);
 
   const paginatedGroupedBooks = groupedBooks.slice(
