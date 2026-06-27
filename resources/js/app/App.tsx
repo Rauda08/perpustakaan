@@ -25,7 +25,7 @@ export default function App() {
   const [quickLoanType, setQuickLoanType] = useState<string | null>(null);
 
   const handleAddPenalty = (record: Penalty) => {
-    setPenaltyRecords(prev => [...prev, record]);
+    setPenaltyRecords((prev) => [...prev, record]);
   };
 
   const handleLogin = () => {
@@ -38,6 +38,12 @@ export default function App() {
     setCurrentPage('dashboard');
     setPublicPage('landing');
     setShowLogin(false);
+    setQuickLoanType(null);
+  };
+
+  const handleNavigate = (page: string) => {
+    setCurrentPage(page);
+    setQuickLoanType(null);
   };
 
   if (!isLoggedIn && showLogin) {
@@ -53,25 +59,39 @@ export default function App() {
   }
 
   if (!isLoggedIn && publicPage === 'landing') {
-    return <LandingPage onNavigate={setPublicPage} onLoginClick={() => setShowLogin(true)} />;
+    return (
+      <LandingPage
+        onNavigate={setPublicPage}
+        onLoginClick={() => setShowLogin(true)}
+      />
+    );
   }
 
   return (
-    <div className="flex h-screen bg-background print:block print:h-auto">
+    <div className="min-h-screen bg-background print:block print:h-auto lg:flex lg:h-screen">
       <div className="print:hidden">
         <Sidebar
           currentPage={currentPage}
-          onNavigate={setCurrentPage}
+          onNavigate={handleNavigate}
           onLogout={handleLogout}
         />
       </div>
-      <main className="flex-1 overflow-y-auto print:overflow-visible">
-        <div className="p-8 print:p-0">
+
+      <main className="flex-1 w-full overflow-y-auto print:overflow-visible">
+        <div className="px-4 pt-20 pb-24 lg:p-8 print:p-0">
           {currentPage === 'dashboard' && (
-            <Dashboard onQuickBorrow={(type) => { setQuickLoanType(type); setCurrentPage('transactions'); }} />
+            <Dashboard
+              onQuickBorrow={(type) => {
+                setQuickLoanType(type);
+                setCurrentPage('transactions');
+              }}
+            />
           )}
+
           {currentPage === 'books' && <Books />}
+
           {currentPage === 'members' && <Members />}
+
           {currentPage === 'transactions' && (
             <Transactions
               onAddPenalty={handleAddPenalty}
@@ -79,9 +99,14 @@ export default function App() {
               onQuickLoanConsumed={() => setQuickLoanType(null)}
             />
           )}
+
           {currentPage === 'history' && <History />}
+
           {currentPage === 'visitors' && <Visitors />}
-          {currentPage === 'reports' && <Reports penaltyRecords={penaltyRecords} />}
+
+          {currentPage === 'reports' && (
+            <Reports penaltyRecords={penaltyRecords} />
+          )}
         </div>
       </main>
     </div>
