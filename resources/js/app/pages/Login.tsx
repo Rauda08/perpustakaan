@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Lock, User } from 'lucide-react';
+import { Lock, User, AlertCircle } from 'lucide-react';
 import logoImage from '../../imports/logoperpus.png';
 
 interface LoginProps {
@@ -9,10 +9,65 @@ interface LoginProps {
 export function Login({ onLogin }: LoginProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin();
+    setErrorMsg('');
+
+    if (!username.trim()) {
+      setErrorMsg('Username wajib diisi.');
+      return;
+    }
+
+    if (!password.trim()) {
+      setErrorMsg('Password wajib diisi.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: username.trim(),
+          password,
+        }),
+      });
+
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || result?.success === false) {
+        const message =
+          result?.message ||
+          result?.errors?.username?.[0] ||
+          result?.errors?.password?.[0] ||
+          'Username atau password salah.';
+
+        setErrorMsg(message);
+        return;
+      }
+
+      if (result?.token) {
+        localStorage.setItem('auth_token', result.token);
+      }
+
+      if (result?.data) {
+        localStorage.setItem('auth_user', JSON.stringify(result.data));
+      }
+
+      onLogin();
+    } catch {
+      setErrorMsg('Gagal terhubung ke server. Pastikan Laravel sedang berjalan.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -41,6 +96,13 @@ export function Login({ onLogin }: LoginProps) {
             </p>
           </div>
 
+          {errorMsg && (
+            <div className="mb-5 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
@@ -51,9 +113,13 @@ export function Login({ onLogin }: LoginProps) {
                 <input
                   type="text"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    setErrorMsg('');
+                  }}
                   className="w-full pl-11 pr-4 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                   placeholder="Masukkan username"
+                  autoComplete="username"
                   required
                 />
               </div>
@@ -68,9 +134,13 @@ export function Login({ onLogin }: LoginProps) {
                 <input
                   type="password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setErrorMsg('');
+                  }}
                   className="w-full pl-11 pr-4 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                   placeholder="Masukkan password"
+                  autoComplete="current-password"
                   required
                 />
               </div>
@@ -78,9 +148,14 @@ export function Login({ onLogin }: LoginProps) {
 
             <button
               type="submit"
-              className="w-full bg-primary hover:bg-primary/90 text-white py-3 rounded-lg font-medium transition-all shadow-sm hover:shadow-md"
+              disabled={loading}
+              className={`w-full py-3 rounded-lg font-medium transition-all shadow-sm hover:shadow-md ${
+                loading
+                  ? 'bg-primary/60 text-white cursor-not-allowed'
+                  : 'bg-primary hover:bg-primary/90 text-white'
+              }`}
             >
-              Masuk
+              {loading ? 'Memeriksa...' : 'Masuk'}
             </button>
           </form>
 
