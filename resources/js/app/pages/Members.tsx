@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   Search,
   Plus,
@@ -59,6 +59,21 @@ const extractArray = (payload: any): any[] => {
   if (Array.isArray(data?.borrowings)) return data.borrowings;
 
   return [];
+};
+
+
+const getApiErrorMessage = async (response: Response, fallback: string) => {
+  const result = await response.json().catch(() => null);
+
+  return (
+    result?.message ||
+    result?.errors?.name?.[0] ||
+    result?.errors?.class_nip?.[0] ||
+    result?.errors?.classNip?.[0] ||
+    result?.errors?.type?.[0] ||
+    result?.errors?.phone?.[0] ||
+    fallback
+  );
 };
 
 const normalizeMember = (item: any): Member => ({
@@ -157,6 +172,16 @@ export function Members() {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleteError, setDeleteError] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+  });
 
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
@@ -172,52 +197,53 @@ export function Members() {
   const [showTahunanAccordion, setShowTahunanAccordion] = useState(false);
 
   const loadMembers = async () => {
-    try {
-      const response = await fetch('/api/members', {
-        headers: {
-          Accept: 'application/json',
-        },
-      });
+    const response = await fetch('/api/members', {
+      headers: {
+        Accept: 'application/json',
+      },
+    });
 
-      if (!response.ok) {
-        throw new Error('Gagal mengambil data anggota.');
-      }
-
-      const result = await response.json();
-      const data = extractArray(result).map(normalizeMember);
-
-      setMembers(data);
-    } catch {
-      setMembers([]);
+    if (!response.ok) {
+      throw new Error(
+        await getApiErrorMessage(response, 'Gagal mengambil data anggota.')
+      );
     }
+
+    const result = await response.json();
+    const data = extractArray(result).map(normalizeMember);
+
+    setMembers(data);
   };
 
   const loadBorrowings = async () => {
-    try {
-      const response = await fetch('/api/borrowings', {
-        headers: {
-          Accept: 'application/json',
-        },
-      });
+    const response = await fetch('/api/borrowings', {
+      headers: {
+        Accept: 'application/json',
+      },
+    });
 
-      if (!response.ok) {
-        throw new Error('Gagal mengambil data peminjaman.');
-      }
-
-      const result = await response.json();
-      const data = extractArray(result).map(normalizeBorrowing);
-
-      setBorrowings(data);
-    } catch {
-      setBorrowings([]);
+    if (!response.ok) {
+      throw new Error(
+        await getApiErrorMessage(response, 'Gagal mengambil data peminjaman.')
+      );
     }
+
+    const result = await response.json();
+    const data = extractArray(result).map(normalizeBorrowing);
+
+    setBorrowings(data);
   };
 
   const loadData = async () => {
     setLoading(true);
+    setErrorMsg('');
 
     try {
       await Promise.all([loadMembers(), loadBorrowings()]);
+    } catch (error: any) {
+      setMembers([]);
+      setBorrowings([]);
+      setErrorMsg(error.message || 'Gagal memuat data anggota.');
     } finally {
       setLoading(false);
     }
@@ -366,6 +392,9 @@ export function Members() {
 
     const memberId = confirmDialog.memberId;
 
+    setSaving(true);
+    setErrorMsg('');
+
     try {
       const response = await fetch(`/api/members/${memberId}`, {
         method: 'DELETE',
@@ -375,15 +404,28 @@ export function Members() {
       });
 
       if (!response.ok) {
-        throw new Error('Gagal menghapus anggota.');
+        throw new Error(
+          await getApiErrorMessage(response, 'Gagal menghapus anggota.')
+        );
       }
 
-      setMembers((previous) => previous.filter((member) => member.id !== memberId));
-      setSuccessMsg('Anggota berhasil dihapus!');
-    } catch {
-      setMembers((previous) => previous.filter((member) => member.id !== memberId));
-      setSuccessMsg('Anggota berhasil dihapus dari tampilan lokal.');
+      setMembers((previous) =>
+        previous.filter((member) => member.id !== memberId)
+      );
+      setBorrowings((previous) =>
+        previous.filter((borrowing) => Number(borrowing.memberId) !== memberId)
+      );
+
+      setSuccessMsg('Anggota berhasil dihapus dari database!');
+      await loadData();
+    } catch (error: any) {
+      setDeleteError({
+        isOpen: true,
+        title: 'Tidak Dapat Dihapus',
+        message: error.message || 'Anggota tidak dapat dihapus dari database.',
+      });
     } finally {
+      setSaving(false);
       setConfirmDialog({
         isOpen: false,
         memberId: null,
@@ -391,13 +433,13 @@ export function Members() {
     }
   };
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
 
     const normalizedClassNip =
       formData.type === 'Guru' && formData.teacherStatus === 'Honorer'
         ? 'Honorer'
-        : formData.classNip;
+        : formData.classNip.trim();
 
     const duplicate = members.find((member) => {
       if (normalizedClassNip === 'Honorer') {
@@ -418,15 +460,18 @@ export function Members() {
     }
 
     const payload = {
-      name: formData.name,
+      name: formData.name.trim(),
       class_nip: normalizedClassNip,
       classNip: normalizedClassNip,
       type: formData.type,
-      phone: formData.phone,
+      phone: formData.phone.trim(),
     };
 
-    if (editingMember) {
-      try {
+    setSaving(true);
+    setErrorMsg('');
+
+    try {
+      if (editingMember) {
         const response = await fetch(`/api/members/${editingMember.id}`, {
           method: 'PUT',
           headers: {
@@ -437,7 +482,9 @@ export function Members() {
         });
 
         if (!response.ok) {
-          throw new Error('Gagal memperbarui anggota.');
+          throw new Error(
+            await getApiErrorMessage(response, 'Gagal memperbarui anggota.')
+          );
         }
 
         const result = await response.json();
@@ -449,26 +496,8 @@ export function Members() {
           )
         );
 
-        setSuccessMsg('Anggota berhasil diperbarui!');
-      } catch {
-        setMembers((previous) =>
-          previous.map((member) =>
-            member.id === editingMember.id
-              ? {
-                  ...member,
-                  name: formData.name,
-                  classNip: normalizedClassNip,
-                  type: formData.type,
-                  phone: formData.phone,
-                }
-              : member
-          )
-        );
-
-        setSuccessMsg('Anggota berhasil diperbarui pada tampilan lokal.');
-      }
-    } else {
-      try {
+        setSuccessMsg('Anggota berhasil diperbarui di database!');
+      } else {
         const response = await fetch('/api/members', {
           method: 'POST',
           headers: {
@@ -479,29 +508,26 @@ export function Members() {
         });
 
         if (!response.ok) {
-          throw new Error('Gagal menambahkan anggota.');
+          throw new Error(
+            await getApiErrorMessage(response, 'Gagal menambahkan anggota.')
+          );
         }
 
         const result = await response.json();
         const createdMember = normalizeMember(result.data ?? result);
 
         setMembers((previous) => [...previous, createdMember]);
-        setSuccessMsg('Anggota berhasil ditambahkan!');
-      } catch {
-        const newMember: Member = {
-          id: Math.max(...members.map((member) => member.id), 0) + 1,
-          name: formData.name,
-          classNip: normalizedClassNip,
-          type: formData.type,
-          phone: formData.phone,
-        };
-
-        setMembers((previous) => [...previous, newMember]);
-        setSuccessMsg('Anggota berhasil ditambahkan pada tampilan lokal.');
+        setSuccessMsg('Anggota berhasil ditambahkan ke database!');
       }
-    }
 
-    setShowModal(false);
+      setShowModal(false);
+      setEditingMember(null);
+      await loadData();
+    } catch (error: any) {
+      setErrorMsg(error.message || 'Gagal menyimpan anggota ke database.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const goToPreviousPage = () => {
@@ -924,16 +950,22 @@ export function Members() {
                 setShowModal(false);
                 setErrorMsg('');
               }}
-              className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium"
+              disabled={saving}
+              className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed"
             >
               Batal
             </button>
 
             <button
               type="submit"
-              className="flex-1 px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg font-medium transition-all shadow-sm"
+              disabled={saving}
+              className="flex-1 px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg font-medium transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {editingMember ? 'Simpan Perubahan' : 'Tambah Anggota'}
+              {saving
+                ? 'Menyimpan...'
+                : editingMember
+                ? 'Simpan Perubahan'
+                : 'Tambah Anggota'}
             </button>
           </div>
         </form>
@@ -1157,12 +1189,12 @@ export function Members() {
                                 </span>
                               ) : (
                                 <span className={`text-xs font-semibold ${
-                                  item.status === 'Tepat waktu'
+                                  isReturnedStatus(item.status)
                                     ? 'text-[#3a5a80]'
                                     : 'text-red-500'
                                 }`}>
                                   {formatDate(item.returnDate)}
-                                  {item.status !== 'Tepat waktu' && (
+                                  {!isReturnedStatus(item.status) && (
                                     <span className="ml-1 text-[9px] text-red-400">
                                       (terlambat)
                                     </span>
@@ -1344,6 +1376,38 @@ export function Members() {
         onClose={() => setSuccessMsg('')}
       />
 
+      {deleteError.isOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-3xl bg-white px-7 py-7 text-center shadow-2xl">
+            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+              <Trash2 className="h-8 w-8 text-red-600" />
+            </div>
+
+            <h2 className="mb-3 text-xl font-semibold text-foreground">
+              {deleteError.title}
+            </h2>
+
+            <p className="mx-auto mb-6 max-w-xs text-sm leading-relaxed text-muted-foreground">
+              {deleteError.message}
+            </p>
+
+            <button
+              type="button"
+              onClick={() =>
+                setDeleteError({
+                  isOpen: false,
+                  title: '',
+                  message: '',
+                })
+              }
+              className="w-full rounded-xl bg-primary px-5 py-3 font-semibold text-white shadow-sm transition-colors hover:bg-primary/90"
+            >
+              Oke
+            </button>
+          </div>
+        </div>
+      )}
+
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}
         onClose={() =>
@@ -1355,7 +1419,7 @@ export function Members() {
         onConfirm={confirmDelete}
         title="Hapus Anggota"
         message="Apakah Anda yakin ingin menghapus anggota ini? Tindakan ini tidak dapat dibatalkan."
-        confirmText="Hapus"
+        confirmText={saving ? "Menghapus..." : "Hapus"}
         cancelText="Batal"
         type="danger"
       />
