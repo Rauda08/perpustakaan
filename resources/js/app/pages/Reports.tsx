@@ -1419,11 +1419,15 @@ export function Reports({ penaltyRecords = [] }: ReportsProps) {
                 year: 'numeric',
               })}
             </p>
-            <p className="text-sm font-semibold mb-16">Petugas Perpustakaan</p>
-            <div className="border-t border-black pt-1">
-              <p className="text-sm font-semibold">(...........................)</p>
-              <p className="text-xs">NIP. ...........................</p>
-            </div>
+
+<p className="text-sm font-semibold mb-20">Petugas Perpustakaan</p>
+
+<div className="pt-1">
+  <p className="text-sm font-semibold">(.....................................)</p>
+  <p className="text-xs whitespace-nowrap">
+    NIP. ........................................
+  </p>
+</div>
           </div>
         </div>
       </div>
