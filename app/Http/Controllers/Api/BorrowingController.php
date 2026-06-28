@@ -138,6 +138,7 @@ class BorrowingController extends BaseApiController
             $borrowDate = $data['borrow_date'] ?? $data['borrowDate'];
             $dueDate = $data['due_date'] ?? $data['dueDate'];
             $loanType = $data['loan_type'] ?? $data['loanType'];
+            $returnTime = $data['return_time'] ?? $data['returnTime'] ?? null;
             $items = collect();
 
             foreach ($copies as $copy) {
@@ -147,8 +148,8 @@ class BorrowingController extends BaseApiController
                     'book_copy_id' => $copy->id,
                     'borrow_date' => $borrowDate,
                     'due_date' => $dueDate,
-                    'return_time' => $data['return_time'] ?? $data['returnTime'] ?? null,
-                    'status' => Carbon::parse($dueDate)->lt(Carbon::today()) ? 'Terlambat' : 'Aktif',
+                    'return_time' => $returnTime,
+                    'status' => $this->determineBorrowingStatus($dueDate, $returnTime, $loanType),
                     'loan_type' => $loanType,
                     'loan_sub_type' => $data['loan_sub_type'] ?? $data['loanSubType'] ?? null,
                     'quantity' => $data['quantity'] ?? 1,
@@ -195,14 +196,20 @@ class BorrowingController extends BaseApiController
         ]);
 
         $dueDate = $data['due_date'] ?? $data['dueDate'] ?? $borrowing->due_date;
+        $returnTime = array_key_exists('return_time', $data)
+            ? $data['return_time']
+            : (array_key_exists('returnTime', $data)
+                ? $data['returnTime']
+                : $borrowing->return_time);
 
+        $loanType = $data['loan_type'] ?? $data['loanType'] ?? $borrowing->loan_type;
         $borrowing->update([
             'member_id' => $data['member_id'] ?? $data['memberId'] ?? $borrowing->member_id,
             'borrow_date' => $data['borrow_date'] ?? $data['borrowDate'] ?? $borrowing->borrow_date,
             'due_date' => $dueDate,
-            'return_time' => array_key_exists('return_time', $data) ? $data['return_time'] : (array_key_exists('returnTime', $data) ? $data['returnTime'] : $borrowing->return_time),
-            'status' => Carbon::parse($dueDate)->lt(Carbon::today()) ? 'Terlambat' : 'Aktif',
-            'loan_type' => $data['loan_type'] ?? $data['loanType'] ?? $borrowing->loan_type,
+            'return_time' => $returnTime,
+            'status' => $this->determineBorrowingStatus($dueDate, $returnTime, $loanType),
+            'loan_type' => $loanType,
             'loan_sub_type' => array_key_exists('loan_sub_type', $data) ? $data['loan_sub_type'] : (array_key_exists('loanSubType', $data) ? $data['loanSubType'] : $borrowing->loan_sub_type),
             'quantity' => $data['quantity'] ?? $borrowing->quantity,
             'class_name' => array_key_exists('class_name', $data) ? $data['class_name'] : (array_key_exists('className', $data) ? $data['className'] : $borrowing->class_name),
@@ -278,11 +285,56 @@ class BorrowingController extends BaseApiController
     }
 
     private function refreshLateStatuses(): void
-    {
+{
+    $timezone = 'Asia/Jakarta';
+    $now = Carbon::now($timezone);
+
     Borrowing::query()
         ->where('status', 'Aktif')
         ->where('loan_type', '!=', 'Guru')
-        ->whereDate('due_date', '<', Carbon::today())
+        ->where(function ($query) use ($now) {
+            $query
+                ->whereDate('due_date', '<', $now->toDateString())
+                ->orWhere(function ($dailyQuery) use ($now) {
+                    $dailyQuery
+                        ->where('loan_type', 'Harian')
+                        ->whereDate('due_date', $now->toDateString())
+                        ->whereNotNull('return_time')
+                        ->where('return_time', '<', $now->format('H:i:s'));
+                });
+        })
         ->update(['status' => 'Terlambat']);
+}
+
+private function determineBorrowingStatus($dueDate, ?string $returnTime, string $loanType): string
+{
+    if ($loanType === 'Guru') {
+        return 'Aktif';
     }
+
+    $timezone = 'Asia/Jakarta';
+    $now = Carbon::now($timezone);
+    $due = Carbon::parse($dueDate, $timezone);
+
+    if ($due->toDateString() < $now->toDateString()) {
+        return 'Terlambat';
+    }
+
+    if (
+        $loanType === 'Harian' &&
+        $due->toDateString() === $now->toDateString() &&
+        $returnTime
+    ) {
+        $limitTime = Carbon::parse(
+            $due->toDateString() . ' ' . $returnTime,
+            $timezone
+        );
+
+        if ($now->gt($limitTime)) {
+            return 'Terlambat';
+        }
+    }
+
+    return 'Aktif';
+}
 }
