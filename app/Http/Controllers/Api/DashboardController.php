@@ -14,32 +14,36 @@ class DashboardController extends BaseApiController
 {
     public function __invoke(Request $request)
     {
-        $today = $request->query('date', now()->toDateString());
-        $todayCarbon = Carbon::parse($today);
+        $timezone = 'Asia/Jakarta';
+        $now = Carbon::now($timezone);
 
-        Borrowing::query()
-            ->where('status', 'Aktif')
-            ->whereDate('due_date', '<', $today)
-            ->update(['status' => 'Terlambat']);
+        $today = $request->query('date', $now->toDateString());
+        $todayCarbon = Carbon::parse($today, $timezone);
+
+        $this->refreshLateStatuses();
 
         $dueToday = Borrowing::with(['member', 'bookCopy.bookMaster'])
-            ->whereIn('status', ['Aktif', 'Terlambat'])
+            ->where('status', 'Aktif')
+            ->where('loan_type', '!=', 'Guru')
             ->whereDate('due_date', $today)
+            ->orderBy('return_time')
             ->get()
             ->map(fn (Borrowing $borrowing) => $this->borrowingResource($borrowing));
 
         $lateReturnsTimeline = Borrowing::with(['member', 'bookCopy.bookMaster'])
-            ->whereIn('status', ['Aktif', 'Terlambat'])
-            ->whereDate('due_date', '<', $today)
+            ->where('status', 'Terlambat')
             ->orderBy('due_date')
+            ->orderBy('return_time')
             ->limit(10)
             ->get()
             ->map(function (Borrowing $borrowing) use ($todayCarbon) {
                 $data = $this->borrowingResource($borrowing);
 
-                $data['daysLate'] = Carbon::parse($borrowing->due_date)
+                $daysLate = Carbon::parse($borrowing->due_date)
                     ->startOfDay()
                     ->diffInDays($todayCarbon->copy()->startOfDay());
+
+                $data['daysLate'] = $daysLate;
 
                 return $data;
             });
@@ -85,5 +89,27 @@ class DashboardController extends BaseApiController
         ];
 
         return $this->ok($data);
+    }
+
+    private function refreshLateStatuses(): void
+    {
+        $timezone = 'Asia/Jakarta';
+        $now = Carbon::now($timezone);
+
+        Borrowing::query()
+            ->where('status', 'Aktif')
+            ->where('loan_type', '!=', 'Guru')
+            ->where(function ($query) use ($now) {
+                $query
+                    ->whereDate('due_date', '<', $now->toDateString())
+                    ->orWhere(function ($dailyQuery) use ($now) {
+                        $dailyQuery
+                            ->where('loan_type', 'Harian')
+                            ->whereDate('due_date', $now->toDateString())
+                            ->whereNotNull('return_time')
+                            ->where('return_time', '<', $now->format('H:i:s'));
+                    });
+            })
+            ->update(['status' => 'Terlambat']);
     }
 }
