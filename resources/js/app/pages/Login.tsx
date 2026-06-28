@@ -1,18 +1,19 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Lock, User, AlertCircle } from 'lucide-react';
 import logoImage from '../../imports/logoperpus.png';
 
 interface LoginProps {
   onLogin: () => void;
+  onBack?: () => void;
 }
 
-export function Login({ onLogin }: LoginProps) {
+export function Login({ onLogin, onBack }: LoginProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
@@ -158,6 +159,17 @@ export function Login({ onLogin }: LoginProps) {
               {loading ? 'Memeriksa...' : 'Masuk'}
             </button>
           </form>
+
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              disabled={loading}
+              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-border text-muted-foreground hover:bg-accent hover:text-foreground transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              Kembali
+            </button>
+          )}
 
           <div className="mt-6 text-center text-xs text-muted-foreground">
             © 2026 Perpustakaan SMAN Bernas Binsus

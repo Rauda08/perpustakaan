@@ -59,8 +59,16 @@ export default function App() {
   };
 
   if (!isLoggedIn && showLogin) {
-    return <Login onLogin={handleLogin} />;
-  }
+  return (
+    <Login
+      onLogin={handleLogin}
+      onBack={() => {
+        setShowLogin(false);
+        setPublicPage('landing');
+      }}
+    />
+  );
+}
 
   if (!isLoggedIn && publicPage === 'visitor-form') {
     return <PublicVisitorForm onBack={() => setPublicPage('landing')} />;

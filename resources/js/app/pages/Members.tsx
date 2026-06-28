@@ -150,6 +150,24 @@ const isReturnedStatus = (status: string) => {
   return status === 'Dikembalikan' || status === 'Selesai' || status === 'Returned';
 };
 
+const onlyNumbers = (value: string) => {
+  return value.replace(/\D/g, '');
+};
+
+const normalizePhoneInput = (value: string) => {
+  const cleaned = value.replace(/[^0-9-]/g, '');
+
+  if (cleaned.includes('-')) {
+    return '-';
+  }
+
+  return cleaned;
+};
+
+const isValidPhone = (value: string) => {
+  return value === '-' || /^\d+$/.test(value);
+};
+
 export function Members() {
   const [members, setMembers] = useState<Member[]>([]);
   const [borrowings, setBorrowings] = useState<Borrowing[]>([]);
@@ -460,9 +478,39 @@ export function Members() {
     event.preventDefault();
 
     const normalizedClassNip =
-      formData.type === 'Guru' && formData.teacherStatus === 'Honorer'
-        ? 'Honorer'
-        : formData.classNip.trim();
+  formData.type === 'Guru' && formData.teacherStatus === 'Honorer'
+    ? 'Honorer'
+    : onlyNumbers(formData.classNip);
+
+    if (
+    formData.type === 'Guru' &&
+    formData.teacherStatus === 'PNS' &&
+    !/^\d{18}$/.test(normalizedClassNip)
+    ) {
+    setErrorMsg('NIP guru PNS harus terdiri dari tepat 18 digit angka.');
+    return;
+    }
+
+    const normalizedPhone = formData.phone.trim() || '-';
+
+    if (formData.type === 'Siswa' && !/^\d+$/.test(normalizedClassNip)) {
+      setErrorMsg('NIS hanya boleh berisi angka.');
+      return;
+    }
+
+    if (
+      formData.type === 'Guru' &&
+      formData.teacherStatus === 'PNS' &&
+      !/^\d+$/.test(normalizedClassNip)
+    ) {
+      setErrorMsg('NIP hanya boleh berisi angka.');
+      return;
+    }
+
+    if (!isValidPhone(normalizedPhone)) {
+      setErrorMsg('Nomor HP hanya boleh angka, atau isi tanda - jika tidak punya nomor telepon.');
+      return;
+    }
 
     const duplicate = members.find((member) => {
       if (normalizedClassNip === 'Honorer') {
@@ -487,7 +535,7 @@ export function Members() {
       class_nip: normalizedClassNip,
       classNip: normalizedClassNip,
       type: formData.type,
-      phone: formData.phone.trim(),
+      phone: normalizedPhone,
     };
 
     setSaving(true);
@@ -583,47 +631,55 @@ export function Members() {
       </div>
 
       <div className="bg-white rounded-xl p-6 shadow-sm border border-border">
-        <div className="mb-6 space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+        <div className="mb-6 flex flex-col xl:flex-row xl:items-center gap-3">
+          <div className="relative flex-1 xl:max-w-[900px]">
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <input
               type="text"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               placeholder="Cari anggota berdasarkan nama atau NIS/NIP"
-              className="w-full pl-11 pr-4 py-3 bg-accent/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+              className="w-full h-12 pl-14 pr-5 bg-accent/50 border border-border rounded-2xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
             />
           </div>
 
-          <div className="flex flex-col md:flex-row gap-3">
-            <select
-              value={typeFilter}
-              onChange={(event) => setTypeFilter(event.target.value)}
-              className="px-4 py-3 bg-accent/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium"
-            >
-              <option value="Semua">Semua Jenis</option>
-              <option value="Siswa">Siswa</option>
-              <option value="Guru">Guru</option>
-            </select>
+          <div className="flex flex-col sm:flex-row gap-3 shrink-0">
+            <div className="relative w-full sm:w-[190px]">
+              <select
+                value={typeFilter}
+                onChange={(event) => setTypeFilter(event.target.value)}
+                className="appearance-none w-full h-12 pl-5 pr-12 bg-accent/50 border border-border rounded-2xl text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              >
+                <option value="Semua">Semua Jenis</option>
+                <option value="Siswa">Siswa</option>
+                <option value="Guru">Guru</option>
+              </select>
 
-            <select
-              value={sortBy}
-              onChange={(event) =>
-                setSortBy(
-                  event.target.value as
-                    | 'id_desc'
-                    | 'id_asc'
-                    | 'name_asc'
-                    | 'name_desc'
-                )
-              }
-              className="px-4 py-3 bg-accent/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium"
-            >
-              <option value="id_desc">No Anggota Terbaru</option>
-              <option value="id_asc">No Anggota Terlama</option>
-              <option value="name_asc">Nama A-Z</option>
-              <option value="name_desc">Nama Z-A</option>
-            </select>
+              <ChevronDown className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            </div>
+
+            <div className="relative w-full sm:w-[260px]">
+              <select
+                value={sortBy}
+                onChange={(event) =>
+                  setSortBy(
+                    event.target.value as
+                      | 'id_desc'
+                      | 'id_asc'
+                      | 'name_asc'
+                      | 'name_desc'
+                  )
+                }
+                className="appearance-none w-full h-12 pl-5 pr-12 bg-accent/50 border border-border rounded-2xl text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              >
+                <option value="id_desc">No Anggota Terbaru</option>
+                <option value="id_asc">No Anggota Terlama</option>
+                <option value="name_asc">Nama A-Z</option>
+                <option value="name_desc">Nama Z-A</option>
+              </select>
+
+              <ChevronDown className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            </div>
           </div>
         </div>
 
@@ -860,11 +916,13 @@ export function Members() {
               </label>
               <input
                 type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={formData.classNip}
                 onChange={(event) => {
                   setFormData({
                     ...formData,
-                    classNip: event.target.value,
+                    classNip: onlyNumbers(event.target.value),
                   });
                   setErrorMsg('');
                 }}
@@ -873,7 +931,7 @@ export function Members() {
                 required
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Nomor Induk Siswa
+                Nomor Induk Siswa, angka saja
               </p>
             </div>
           ) : (
@@ -929,22 +987,23 @@ export function Members() {
                   </label>
                   <input
                     type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]{18}"
+                    minLength={18}
+                    maxLength={18}
                     value={formData.classNip}
                     onChange={(event) => {
-                      setFormData({
+                        setFormData({
                         ...formData,
-                        classNip: event.target.value,
-                      });
-                      setErrorMsg('');
+                        classNip: onlyNumbers(event.target.value),
+                        });
+                        setErrorMsg('');
                     }}
                     className="w-full px-4 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     placeholder="Masukkan NIP 18 digit"
-                    maxLength={18}
+                    title="NIP harus terdiri dari tepat 18 digit angka"
                     required
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Format: 18 digit angka
-                  </p>
+                    />
                 </div>
               )}
 
@@ -965,17 +1024,21 @@ export function Members() {
             </label>
             <input
               type="tel"
+              inputMode="numeric"
               value={formData.phone}
-              onChange={(event) =>
+              onChange={(event) => {
                 setFormData({
                   ...formData,
-                  phone: event.target.value,
-                })
-              }
+                  phone: normalizePhoneInput(event.target.value),
+                });
+                setErrorMsg('');
+              }}
               className="w-full px-4 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               placeholder="08123456789"
-              required
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              Gunakan tanda (-) jika tidak punya nomor telepon.
+            </p>
           </div>
 
           {errorMsg && (
