@@ -28,23 +28,6 @@ interface GroupedBook {
 
 const ITEMS_PER_PAGE = 9;
 
-const fallbackBooksData: Book[] = [
-  { id: 1, title: 'Laskar Pelangi', author: 'Andrea Hirata', category: 'Fiksi', number: 'BK001', shelf: 'A-01', status: 'Tersedia' },
-  { id: 2, title: 'Laskar Pelangi', author: 'Andrea Hirata', category: 'Fiksi', number: 'BK002', shelf: 'A-01', status: 'Dipinjam' },
-  { id: 3, title: 'Laskar Pelangi', author: 'Andrea Hirata', category: 'Fiksi', number: 'BK003', shelf: 'A-01', status: 'Tersedia' },
-  { id: 4, title: 'Bumi Manusia', author: 'Pramoedya Ananta Toer', category: 'Fiksi', number: 'BK004', shelf: 'A-02', status: 'Dipinjam' },
-  { id: 5, title: 'Bumi Manusia', author: 'Pramoedya Ananta Toer', category: 'Fiksi', number: 'BK005', shelf: 'A-02', status: 'Tersedia' },
-  { id: 6, title: 'Negeri 5 Menara', author: 'Ahmad Fuadi', category: 'Fiksi', number: 'BK006', shelf: 'A-03', status: 'Tersedia' },
-  { id: 7, title: 'Perahu Kertas', author: 'Dee Lestari', category: 'Fiksi', number: 'BK007', shelf: 'A-04', status: 'Tersedia' },
-  { id: 8, title: 'Perahu Kertas', author: 'Dee Lestari', category: 'Fiksi', number: 'BK008', shelf: 'A-04', status: 'Tersedia' },
-  { id: 9, title: 'Sang Pemimpi', author: 'Andrea Hirata', category: 'Fiksi', number: 'BK009', shelf: 'A-05', status: 'Dipinjam' },
-  { id: 10, title: 'Filosofi Kopi', author: 'Dewi Lestari', category: 'Fiksi', number: 'BK010', shelf: 'B-01', status: 'Tersedia' },
-  { id: 11, title: 'Ayat-Ayat Cinta', author: 'Habiburrahman El Shirazy', category: 'Religi', number: 'BK011', shelf: 'B-02', status: 'Tersedia' },
-  { id: 12, title: 'Ayat-Ayat Cinta', author: 'Habiburrahman El Shirazy', category: 'Religi', number: 'BK012', shelf: 'B-02', status: 'Tersedia' },
-  { id: 13, title: 'Matematika Kelas X', author: 'Tim Penulis', category: 'Pelajaran', number: 'BK013', shelf: 'C-01', status: 'Tersedia' },
-  { id: 14, title: 'Matematika Kelas X', author: 'Tim Penulis', category: 'Pelajaran', number: 'BK014', shelf: 'C-01', status: 'Tersedia' },
-  { id: 15, title: 'Matematika Kelas X', author: 'Tim Penulis', category: 'Pelajaran', number: 'BK015', shelf: 'C-01', status: 'Dipinjam' },
-];
 
 const extractArray = (payload: any): any[] => {
   const data = payload?.data ?? payload;
@@ -59,32 +42,6 @@ const extractArray = (payload: any): any[] => {
   return [];
 };
 
-const fetchApiArray = async (urls: string[]) => {
-  for (const url of urls) {
-    try {
-      const response = await fetch(url, {
-        headers: {
-          Accept: 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        continue;
-      }
-
-      const result = await response.json();
-      const data = extractArray(result);
-
-      if (Array.isArray(data) && data.length > 0) {
-        return data;
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return [];
-};
 
 const normalizeBook = (item: any): Book => {
   const bookMaster =
@@ -156,32 +113,42 @@ const normalizeBooks = (items: any[]): Book[] => {
   return books.filter((book) => book.title !== '-');
 };
 
+const isBookAvailable = (status: string) => {
+  return status === 'Tersedia' || status === 'Available';
+};
+
 export function PublicSearchBooks({ onBack }: PublicSearchBooksProps) {
-  const [books, setBooks] = useState<Book[]>(fallbackBooksData);
+  const [books, setBooks] = useState<Book[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Semua');
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
-  const [usingFallback, setUsingFallback] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     const loadBooks = async () => {
       setIsLoading(true);
+      setErrorMsg('');
 
       try {
-        const response = await fetchApiArray(['/api/book-copies', '/api/books']);
-        const normalized = normalizeBooks(response);
+        const response = await fetch('/api/books', {
+          headers: {
+            Accept: 'application/json',
+          },
+        });
 
-        if (normalized.length > 0) {
-          setBooks(normalized);
-          setUsingFallback(false);
-        } else {
-          setBooks(fallbackBooksData);
-          setUsingFallback(true);
+        if (!response.ok) {
+          throw new Error('Gagal mengambil data buku.');
         }
+
+        const result = await response.json();
+        const data = extractArray(result);
+        const normalized = normalizeBooks(data);
+
+        setBooks(normalized);
       } catch {
-        setBooks(fallbackBooksData);
-        setUsingFallback(true);
+        setBooks([]);
+        setErrorMsg('Gagal memuat data buku dari database.');
       } finally {
         setIsLoading(false);
       }
@@ -224,34 +191,42 @@ export function PublicSearchBooks({ onBack }: PublicSearchBooksProps) {
 
     filteredBooks.forEach((book) => {
       const key = `${book.title}||${book.author}`;
+      const tersedia = isBookAvailable(book.status);
 
       if (bookMap.has(key)) {
         const group = bookMap.get(key)!;
 
         group.total += 1;
 
-        if (book.status === 'Tersedia') {
+        if (tersedia) {
           group.tersedia += 1;
         } else {
           group.dipinjam += 1;
         }
-      } else {
-        const newGroup: GroupedBook = {
-          title: book.title,
-          author: book.author,
-          category: book.category,
-          shelf: book.shelf,
-          total: 1,
-          tersedia: book.status === 'Tersedia' ? 1 : 0,
-          dipinjam: book.status === 'Dipinjam' ? 1 : 0,
-        };
 
-        bookMap.set(key, newGroup);
-        groups.push(newGroup);
+        return;
       }
+
+      const newGroup: GroupedBook = {
+        title: book.title,
+        author: book.author,
+        category: book.category,
+        shelf: book.shelf,
+        total: 1,
+        tersedia: tersedia ? 1 : 0,
+        dipinjam: tersedia ? 0 : 1,
+      };
+
+      bookMap.set(key, newGroup);
+      groups.push(newGroup);
     });
 
-    return groups;
+    return groups.sort((a, b) =>
+      a.title.localeCompare(b.title, 'id-ID', {
+        sensitivity: 'base',
+        numeric: true,
+      })
+    );
   }, [filteredBooks]);
 
   const totalPages = Math.ceil(groupedBooks.length / ITEMS_PER_PAGE);
@@ -326,7 +301,7 @@ export function PublicSearchBooks({ onBack }: PublicSearchBooksProps) {
                 Cari Buku Perpustakaan
               </h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Cari berdasarkan judul, pengarang, atau nomor eksemplar buku.
+                Cari berdasarkan judul atau pengarang.
               </p>
             </div>
 
@@ -336,9 +311,9 @@ export function PublicSearchBooks({ onBack }: PublicSearchBooksProps) {
               </span>
             )}
 
-            {!isLoading && usingFallback && (
-              <span className="text-xs px-3 py-1 rounded-full bg-yellow-100 text-yellow-700 font-medium">
-                Mode data contoh
+            {!isLoading && errorMsg && (
+              <span className="text-xs px-3 py-1 rounded-full bg-red-100 text-red-700 font-medium">
+                {errorMsg}
               </span>
             )}
           </div>
@@ -514,7 +489,11 @@ export function PublicSearchBooks({ onBack }: PublicSearchBooksProps) {
               <div className="text-center py-12">
                 <BookOpen className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">
-                  Tidak ada buku yang ditemukan
+                  {isLoading
+                    ? 'Memuat data buku...'
+                    : errorMsg
+                    ? 'Data buku gagal dimuat dari database.'
+                    : 'Tidak ada buku yang ditemukan'}
                 </p>
               </div>
             )}
