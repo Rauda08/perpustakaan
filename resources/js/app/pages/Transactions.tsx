@@ -90,6 +90,43 @@ interface BatchItem {
   bookCount: number;
 }
 
+interface PenaltyBookInput {
+  id: string;
+  title: string;
+}
+
+interface ReturnBookState {
+  condition: BookCondition;
+  penaltyType: PenaltyType;
+  penaltyBookTitles: PenaltyBookInput[];
+  notes: string;
+}
+
+const createPenaltyBookInput = (): PenaltyBookInput => ({
+  id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  title: '',
+});
+
+const createReturnBookState = (
+  item: BorrowingItem,
+  batchStatus: string
+): ReturnBookState => ({
+  condition: 'Bagus',
+  penaltyType: batchStatus === 'Terlambat' ? 'Buku Donasi' : 'Buku Pengganti',
+  penaltyBookTitles: [createPenaltyBookInput()],
+  notes: '',
+});
+
+const createInitialReturnBookStates = (batch: BatchItem) => {
+  const result: Record<number, ReturnBookState> = {};
+
+  batch.items.forEach((item) => {
+    result[item.id] = createReturnBookState(item, batch.status);
+  });
+
+  return result;
+};
+
 interface TransactionsProps {
   onAddPenalty?: (record: Penalty) => void;
   quickLoanType?: string | null;
@@ -427,12 +464,9 @@ export function Transactions({
 
   const [selectedBatchForReturn, setSelectedBatchForReturn] =
     useState<BatchItem | null>(null);
-  const [bookCondition, setBookCondition] = useState<BookCondition>('Bagus');
-  const [penaltyData, setPenaltyData] = useState({
-    type: 'Buku Donasi' as PenaltyType,
-    bookTitle: '',
-    notes: '',
-  });
+  const [returnBookStates, setReturnBookStates] = useState<
+    Record<number, ReturnBookState>
+  >({});
 
   const [editMode, setEditMode] = useState(false);
   const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
@@ -1049,14 +1083,135 @@ export function Transactions({
     }
   };
 
+  const updateReturnBookState = (
+    borrowingId: number,
+    changes: Partial<ReturnBookState>
+  ) => {
+    setReturnBookStates((previous) => {
+      const current =
+        previous[borrowingId] ??
+        (selectedBatchForReturn
+          ? createReturnBookState(
+              selectedBatchForReturn.items.find((item) => item.id === borrowingId)!,
+              selectedBatchForReturn.status
+            )
+          : {
+              condition: 'Bagus' as BookCondition,
+              penaltyType: 'Buku Donasi' as PenaltyType,
+              penaltyBookTitles: [createPenaltyBookInput()],
+              notes: '',
+            });
+
+      return {
+        ...previous,
+        [borrowingId]: {
+          ...current,
+          ...changes,
+        },
+      };
+    });
+  };
+
+  const handleReturnConditionChange = (
+    borrowingId: number,
+    condition: BookCondition
+  ) => {
+    setReturnBookStates((previous) => {
+      const current = previous[borrowingId];
+      const isLate = selectedBatchForReturn?.status === 'Terlambat';
+
+      if (!current) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        [borrowingId]: {
+          ...current,
+          condition,
+          penaltyType:
+            condition === 'Rusak' || condition === 'Hilang'
+              ? 'Buku Pengganti'
+              : isLate
+              ? 'Buku Donasi'
+              : current.penaltyType,
+          penaltyBookTitles:
+            current.penaltyBookTitles.length > 0
+              ? current.penaltyBookTitles
+              : [createPenaltyBookInput()],
+        },
+      };
+    });
+  };
+
+  const updatePenaltyBookTitle = (
+    borrowingId: number,
+    inputId: string,
+    title: string
+  ) => {
+    setReturnBookStates((previous) => {
+      const current = previous[borrowingId];
+
+      if (!current) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        [borrowingId]: {
+          ...current,
+          penaltyBookTitles: current.penaltyBookTitles.map((input) =>
+            input.id === inputId ? { ...input, title } : input
+          ),
+        },
+      };
+    });
+  };
+
+  const addPenaltyBookTitle = (borrowingId: number) => {
+    setReturnBookStates((previous) => {
+      const current = previous[borrowingId];
+
+      if (!current) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        [borrowingId]: {
+          ...current,
+          penaltyBookTitles: [
+            ...current.penaltyBookTitles,
+            createPenaltyBookInput(),
+          ],
+        },
+      };
+    });
+  };
+
+  const removePenaltyBookTitle = (borrowingId: number, inputId: string) => {
+    setReturnBookStates((previous) => {
+      const current = previous[borrowingId];
+
+      if (!current || current.penaltyBookTitles.length <= 1) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        [borrowingId]: {
+          ...current,
+          penaltyBookTitles: current.penaltyBookTitles.filter(
+            (input) => input.id !== inputId
+          ),
+        },
+      };
+    });
+  };
+
   const handleReturn = (batch: BatchItem) => {
     setSelectedBatchForReturn(batch);
-    setBookCondition('Bagus');
-    setPenaltyData({
-      type: batch.status === 'Terlambat' ? 'Buku Donasi' : 'Buku Donasi',
-      bookTitle: '',
-      notes: '',
-    });
+    setReturnBookStates(createInitialReturnBookStates(batch));
     setReturnModal(true);
   };
 
@@ -1068,19 +1223,57 @@ export function Transactions({
     }
 
     const isLate = selectedBatchForReturn.status === 'Terlambat';
-    const needsPenalty =
-      isLate || bookCondition === 'Rusak' || bookCondition === 'Hilang';
 
-    if (needsPenalty && !penaltyData.bookTitle.trim()) {
-      setToast({ message: 'Isi judul buku sanksi terlebih dahulu!', type: 'error' });
-      return;
+    for (const item of selectedBatchForReturn.items) {
+      const itemState =
+        returnBookStates[item.id] ??
+        createReturnBookState(item, selectedBatchForReturn.status);
+
+      const needsPenalty =
+        isLate ||
+        itemState.condition === 'Rusak' ||
+        itemState.condition === 'Hilang';
+
+      const filledPenaltyTitles = itemState.penaltyBookTitles
+        .map((input) => input.title.trim())
+        .filter(Boolean);
+
+      if (needsPenalty && filledPenaltyTitles.length === 0) {
+        setToast({
+          message: `Isi judul buku sanksi untuk ${item.bookTitle} terlebih dahulu!`,
+          type: 'error',
+        });
+        return;
+      }
     }
 
     setIsSaving(true);
 
     try {
+      let penaltyCount = 0;
+      let penaltyBookCount = 0;
+
       await Promise.all(
         selectedBatchForReturn.items.map(async (item) => {
+          const itemState =
+            returnBookStates[item.id] ??
+            createReturnBookState(item, selectedBatchForReturn.status);
+
+          const needsPenalty =
+            isLate ||
+            itemState.condition === 'Rusak' ||
+            itemState.condition === 'Hilang';
+
+          const penaltyReason =
+            itemState.condition === 'Rusak' || itemState.condition === 'Hilang'
+              ? itemState.condition
+              : 'Terlambat';
+
+          const penaltyBookTitle = itemState.penaltyBookTitles
+            .map((input) => input.title.trim())
+            .filter(Boolean)
+            .join(', ');
+
           const response = await fetch(`/api/borrowings/${item.id}/return`, {
             method: 'POST',
             headers: {
@@ -1091,10 +1284,10 @@ export function Transactions({
               return_date: todayDate(),
               return_time: nowTime(),
               withPenalty: needsPenalty,
-              reason: needsPenalty ? (isLate ? 'Terlambat' : bookCondition) : null,
-              penalty_type: needsPenalty ? penaltyData.type : null,
-              penalty_book_title: needsPenalty ? penaltyData.bookTitle : null,
-              notes: penaltyData.notes || null,
+              reason: needsPenalty ? penaltyReason : null,
+              penalty_type: needsPenalty ? itemState.penaltyType : null,
+              penalty_book_title: needsPenalty ? penaltyBookTitle : null,
+              notes: itemState.notes || null,
             }),
           });
 
@@ -1102,6 +1295,13 @@ export function Transactions({
             throw new Error(
               await getApiErrorMessage(response, 'Gagal memproses pengembalian.')
             );
+          }
+
+          if (needsPenalty) {
+            penaltyCount += 1;
+            penaltyBookCount += itemState.penaltyBookTitles
+              .map((input) => input.title.trim())
+              .filter(Boolean).length;
           }
 
           if (needsPenalty && onAddPenalty) {
@@ -1114,23 +1314,24 @@ export function Transactions({
               bookNumber: item.bookNumber,
               bookTitle: item.bookTitle,
               loanType: item.loanType,
-              reason: isLate ? 'Terlambat' : bookCondition,
-              penaltyType: penaltyData.type,
-              penaltyBookTitle: penaltyData.bookTitle,
-              notes: penaltyData.notes,
+              reason: penaltyReason,
+              penaltyType: itemState.penaltyType,
+              penaltyBookTitle,
+              notes: itemState.notes,
             });
           }
         })
       );
 
       setSuccessMsg(
-        needsPenalty
-          ? `Pengembalian berhasil! Sanksi: ${penaltyData.type} (${penaltyData.bookTitle})`
-          : 'Buku berhasil dikembalikan dalam kondisi baik!'
+        penaltyCount > 0
+          ? `Pengembalian berhasil! ${penaltyCount} buku memiliki sanksi dengan ${penaltyBookCount} buku sanksi.`
+          : 'Semua buku berhasil dikembalikan dalam kondisi baik!'
       );
 
       setReturnModal(false);
       setSelectedBatchForReturn(null);
+      setReturnBookStates({});
       await loadData();
     } catch (error: any) {
       setToast({
@@ -2289,6 +2490,7 @@ export function Transactions({
         onClose={() => {
           setReturnModal(false);
           setSelectedBatchForReturn(null);
+          setReturnBookStates({});
         }}
         title="Pengembalian Buku"
       >
@@ -2338,150 +2540,224 @@ export function Transactions({
                     Buku terlambat dikembalikan
                   </p>
                   <p className="text-sm text-red-700">
-                    Sistem akan mencatat sanksi pengembalian.
+                    Semua buku pada transaksi ini akan membutuhkan pencatatan sanksi keterlambatan. Jika ada buku yang rusak atau hilang, pilih kondisi pada buku tersebut.
                   </p>
                 </div>
               </div>
             )}
 
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
-                Kondisi Buku
-              </label>
-
-              <div className="grid grid-cols-3 gap-3">
-                {(['Bagus', 'Rusak', 'Hilang'] as BookCondition[]).map(
-                  (condition) => (
-                    <button
-                      key={condition}
-                      type="button"
-                      onClick={() => {
-                        setBookCondition(condition);
-                        if (condition === 'Rusak' || condition === 'Hilang') {
-                          setPenaltyData({
-                            ...penaltyData,
-                            type: 'Buku Pengganti',
-                          });
-                        }
-                      }}
-                      className={`px-4 py-3 rounded-lg font-medium transition-all border ${
-                        bookCondition === condition
-                          ? 'bg-primary text-white border-primary'
-                          : 'bg-white border-border hover:bg-accent'
-                      }`}
-                    >
-                      {condition}
-                    </button>
-                  )
-                )}
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-semibold text-foreground">
+                  Kondisi dan Sanksi per Buku
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Atur kondisi masing-masing buku. Jika satu peminjaman berisi beberapa buku, setiap buku bisa memiliki sanksi dan daftar buku sanksi sendiri.
+                </p>
               </div>
-            </div>
 
-            {(selectedBatchForReturn.status === 'Terlambat' ||
-              bookCondition === 'Rusak' ||
-              bookCondition === 'Hilang') && (
-              <div className="border border-border rounded-xl overflow-hidden">
-                <div className="bg-accent/60 px-4 py-3 border-b border-border">
-                  <h3 className="font-semibold text-foreground text-sm">
-                    Sanksi / Kondisi Pengembalian
-                  </h3>
-                </div>
+              {selectedBatchForReturn.items.map((item, index) => {
+                const itemState =
+                  returnBookStates[item.id] ??
+                  createReturnBookState(item, selectedBatchForReturn.status);
 
-                <div className="p-4 space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Jenis Sanksi
-                    </label>
+                const itemNeedsPenalty =
+                  selectedBatchForReturn.status === 'Terlambat' ||
+                  itemState.condition === 'Rusak' ||
+                  itemState.condition === 'Hilang';
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {(['Buku Donasi', 'Buku Pengganti'] as PenaltyType[]).map(
-                        (type) => (
-                          <button
-                            key={type}
-                            type="button"
-                            onClick={() =>
-                              setPenaltyData({
-                                ...penaltyData,
-                                type,
-                              })
-                            }
-                            className={`px-4 py-3 rounded-lg text-left transition-all border ${
-                              penaltyData.type === type
-                                ? 'bg-primary text-white border-primary shadow-sm'
-                                : 'bg-white border-border hover:bg-accent'
-                            }`}
-                          >
-                            <p className="font-semibold text-sm">{type}</p>
-                            <p
-                              className={`text-xs mt-0.5 ${
-                                penaltyData.type === type
-                                  ? 'opacity-80'
-                                  : 'text-muted-foreground'
-                              }`}
-                            >
-                              {type === 'Buku Donasi'
-                                ? 'Terlambat mengembalikan'
-                                : 'Buku hilang / rusak'}
-                            </p>
-                          </button>
-                        )
+                const penaltyBookLabel =
+                  itemState.penaltyType === 'Buku Donasi'
+                    ? 'Judul Buku Donasi'
+                    : 'Judul Buku Pengganti';
+
+                return (
+                  <div
+                    key={item.id}
+                    className="border border-border rounded-xl overflow-hidden bg-white"
+                  >
+                    <div className="bg-accent/50 px-4 py-3 border-b border-border flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-foreground">
+                          {index + 1}. {item.bookTitle}
+                        </p>
+                        <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                          {item.bookNumber}
+                        </p>
+                      </div>
+
+                      {itemNeedsPenalty && (
+                        <span className="px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold whitespace-nowrap">
+                          Perlu Sanksi
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="p-4 space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-2">
+                          Kondisi Buku
+                        </label>
+
+                        <div className="grid grid-cols-3 gap-3">
+                          {(['Bagus', 'Rusak', 'Hilang'] as BookCondition[]).map(
+                            (condition) => (
+                              <button
+                                key={condition}
+                                type="button"
+                                onClick={() =>
+                                  handleReturnConditionChange(item.id, condition)
+                                }
+                                className={`px-4 py-3 rounded-lg font-medium transition-all border ${
+                                  itemState.condition === condition
+                                    ? 'bg-primary text-white border-primary'
+                                    : 'bg-white border-border hover:bg-accent'
+                                }`}
+                              >
+                                {condition}
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </div>
+
+                      {itemNeedsPenalty && (
+                        <div className="border border-border rounded-xl overflow-hidden">
+                          <div className="bg-muted/40 px-4 py-3 border-b border-border">
+                            <h4 className="font-semibold text-foreground text-sm">
+                              Sanksi Buku Ini
+                            </h4>
+                          </div>
+
+                          <div className="p-4 space-y-4">
+                            <div>
+                              <label className="block text-sm font-medium text-foreground mb-2">
+                                Jenis Sanksi
+                              </label>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {(['Buku Donasi', 'Buku Pengganti'] as PenaltyType[]).map(
+                                  (type) => (
+                                    <button
+                                      key={type}
+                                      type="button"
+                                      onClick={() =>
+                                        updateReturnBookState(item.id, {
+                                          penaltyType: type,
+                                        })
+                                      }
+                                      className={`px-4 py-3 rounded-lg text-left transition-all border ${
+                                        itemState.penaltyType === type
+                                          ? 'bg-primary text-white border-primary shadow-sm'
+                                          : 'bg-white border-border hover:bg-accent'
+                                      }`}
+                                    >
+                                      <p className="font-semibold text-sm">{type}</p>
+                                      <p
+                                        className={`text-xs mt-0.5 ${
+                                          itemState.penaltyType === type
+                                            ? 'opacity-80'
+                                            : 'text-muted-foreground'
+                                        }`}
+                                      >
+                                        {type === 'Buku Donasi'
+                                          ? 'Terlambat mengembalikan'
+                                          : 'Buku rusak / hilang'}
+                                      </p>
+                                    </button>
+                                  )
+                                )}
+                              </div>
+                            </div>
+
+                            <div>
+                              <div className="flex items-center justify-between gap-3 mb-2">
+                                <label className="block text-sm font-medium text-foreground">
+                                  {penaltyBookLabel}
+                                </label>
+
+                                <button
+                                  type="button"
+                                  onClick={() => addPenaltyBookTitle(item.id)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  Tambah Buku Sanksi
+                                </button>
+                              </div>
+
+                              <div className="space-y-2">
+                                {itemState.penaltyBookTitles.map((input, inputIndex) => (
+                                  <div key={input.id} className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      value={input.title}
+                                      onChange={(event) =>
+                                        updatePenaltyBookTitle(
+                                          item.id,
+                                          input.id,
+                                          event.target.value
+                                        )
+                                      }
+                                      className="flex-1 px-4 py-3 bg-white border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                                      placeholder={
+                                        itemState.penaltyType === 'Buku Donasi'
+                                          ? `Judul buku donasi ${inputIndex + 1}`
+                                          : `Contoh: ${item.bookTitle}`
+                                      }
+                                      required
+                                    />
+
+                                    {itemState.penaltyBookTitles.length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          removePenaltyBookTitle(item.id, input.id)
+                                        }
+                                        className="px-3 rounded-lg border border-border hover:bg-red-50 transition-colors"
+                                        title="Hapus buku sanksi"
+                                      >
+                                        <X className="w-4 h-4 text-red-600" />
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-foreground mb-2">
+                                Catatan untuk Buku Ini
+                              </label>
+
+                              <textarea
+                                value={itemState.notes}
+                                onChange={(event) =>
+                                  updateReturnBookState(item.id, {
+                                    notes: event.target.value,
+                                  })
+                                }
+                                rows={3}
+                                className="w-full px-4 py-3 bg-white border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm resize-none"
+                                placeholder="Contoh: Sampul rusak, halaman hilang, atau keterangan lain..."
+                              />
+                            </div>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Judul Buku{' '}
-                      {penaltyData.type === 'Buku Donasi'
-                        ? 'Donasi'
-                        : 'Pengganti'}
-                    </label>
-
-                    <input
-                      type="text"
-                      value={penaltyData.bookTitle}
-                      onChange={(event) =>
-                        setPenaltyData({
-                          ...penaltyData,
-                          bookTitle: event.target.value,
-                        })
-                      }
-                      className="w-full px-4 py-3 bg-white border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
-                      placeholder={
-                        penaltyData.type === 'Buku Donasi'
-                          ? 'Contoh: Kamus Bahasa Indonesia'
-                          : `Contoh: ${selectedBatchForReturn.items[0].bookTitle}`
-                      }
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Catatan
-                    </label>
-
-                    <textarea
-                      value={penaltyData.notes}
-                      onChange={(event) =>
-                        setPenaltyData({
-                          ...penaltyData,
-                          notes: event.target.value,
-                        })
-                      }
-                      rows={3}
-                      className="w-full px-4 py-3 bg-white border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm resize-none"
-                      placeholder="Contoh: Buku dalam kondisi baik, sampul masih lengkap..."
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
+                );
+              })}
+            </div>
 
             <div className="flex flex-col sm:flex-row gap-3 pt-1">
               <button
                 type="button"
-                onClick={() => setReturnModal(false)}
+                onClick={() => {
+                  setReturnModal(false);
+                  setReturnBookStates({});
+                }}
                 disabled={isSaving}
                 className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium text-sm disabled:opacity-60 disabled:cursor-not-allowed"
               >
