@@ -43,7 +43,7 @@ export function Sidebar({ currentPage, onNavigate, onLogout }: SidebarProps) {
 
             <div className="flex-1">
               <h2 className="font-semibold text-foreground text-sm leading-tight">
-                Sistem Perpustakaan
+                Perpustakaan Betuah
               </h2>
               <p className="text-xs text-primary font-medium">
                 SMAN Bernas Binsus
@@ -102,7 +102,7 @@ export function Sidebar({ currentPage, onNavigate, onLogout }: SidebarProps) {
 
             <div className="min-w-0">
               <h2 className="font-semibold text-foreground text-sm leading-tight truncate">
-                Sistem Perpustakaan
+                Perpustakaan Betuah
               </h2>
               <p className="text-xs text-primary font-medium truncate">
                 SMAN Bernas Binsus

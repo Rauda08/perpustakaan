@@ -87,7 +87,7 @@ export function Login({ onLogin, onBack }: LoginProps) {
 
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-foreground mb-1">
-              Sistem Perpustakaan
+              Perpustakaan Betuah
             </h1>
             <h2 className="text-lg font-semibold text-primary mb-3">
               SMAN Bernas Binsus

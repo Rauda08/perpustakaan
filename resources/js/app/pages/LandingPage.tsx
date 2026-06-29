@@ -21,7 +21,7 @@ export function LandingPage({ onNavigate, onLoginClick }: LandingPageProps) {
               />
             </div>
             <div>
-              <h1 className="font-bold text-foreground">Perpustakaan Digital</h1>
+              <h1 className="font-bold text-foreground">Perpustakaan Betuah</h1>
               <p className="text-xs text-primary font-medium">SMAN Bernas Binsus</p>
             </div>
           </div>
@@ -39,7 +39,7 @@ export function LandingPage({ onNavigate, onLoginClick }: LandingPageProps) {
       <section className="max-w-7xl mx-auto px-6 py-16">
         <div className="text-center mb-12">
           <h2 className="text-4xl font-bold text-foreground mb-4">
-            Selamat Datang di Perpustakaan Digital
+            Selamat Datang di Perpustakaan Betuah
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             Akses katalog buku dan catat kunjungan Anda dengan mudah
@@ -60,7 +60,7 @@ export function LandingPage({ onNavigate, onLoginClick }: LandingPageProps) {
               Input Kunjungan
             </h3>
             <p className="text-muted-foreground mb-4">
-              Catat kunjungan Anda ke perpustakaan (Siswa & Guru)
+              Catat kunjungan Anda ke perpustakaa
             </p>
             <div className="flex items-center gap-2 text-primary font-medium">
               <span>Mulai Catat</span>
@@ -91,11 +91,44 @@ export function LandingPage({ onNavigate, onLoginClick }: LandingPageProps) {
       </section>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-border mt-16">
-        <div className="max-w-7xl mx-auto px-6 py-6 text-center text-sm text-muted-foreground">
-          © 2026 Perpustakaan SMAN Bernas Binsus. All rights reserved.
-        </div>
-      </footer>
+      <footer className="w-full border-t border-blue-100 bg-white/90">
+  <div className="w-full px-10 lg:px-24 py-6">
+    <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="text-center md:text-left">
+        <h3 className="text-sm font-bold text-foreground">
+          Perpustakaan Betuah
+        </h3>
+
+        <p className="text-xs text-muted-foreground mt-1">
+          Sistem Informasi Perpustakaan
+        </p>
+
+        <p className="text-xs text-muted-foreground mt-1">
+          SMAN Bernas Binsus
+        </p>
+      </div>
+
+      <div className="text-center md:text-right">
+
+        <p className="text-xs text-muted-foreground mt-1">
+          Jl. H. Abd. Jalil, Komplek Bakti Praja
+        </p>
+
+        <p className="text-xs text-muted-foreground mt-1">
+          Pangkalan Kerinci Barat, Pelalawan, Riau
+        </p>
+
+        <p className="text-xs text-muted-foreground mt-1">
+          NPSN 10494192 · Akreditasi A
+        </p>
+      </div>
+    </div>
+
+    <div className="mt-5 pt-4 border-t border-blue-100 text-center text-xs text-muted-foreground">
+      © 2026 Perpustakaan Betuah · SMAN Bernas Binsus. All rights reserved.
+    </div>
+  </div>
+</footer>
     </div>
   );
 }
