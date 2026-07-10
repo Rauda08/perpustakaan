@@ -17,6 +17,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 interface Book {
   id: number;
   bookMasterId: number;
+  indukNumber: string;
   title: string;
   author: string;
   category: string;
@@ -29,6 +30,7 @@ interface Book {
 
 interface GroupedBook {
   bookMasterId: number;
+  indukNumber: string;
   title: string;
   author: string;
   category: string;
@@ -60,6 +62,8 @@ const getApiErrorMessage = async (response: Response, fallback: string) => {
 
   return (
     result?.message ||
+    result?.errors?.indukNumber?.[0] ||
+    result?.errors?.induk_number?.[0] ||
     result?.errors?.title?.[0] ||
     result?.errors?.author?.[0] ||
     result?.errors?.category?.[0] ||
@@ -84,6 +88,15 @@ const normalizeBooks = (items: any[]): Book[] => {
         item.book_master?.id ??
         0
     );
+
+    const indukNumber =
+      item.indukNumber ??
+      item.induk_number ??
+      item.bookMaster?.indukNumber ??
+      item.bookMaster?.induk_number ??
+      item.book_master?.indukNumber ??
+      item.book_master?.induk_number ??
+      '-';
 
     const title =
       item.title ??
@@ -140,6 +153,16 @@ const normalizeBooks = (items: any[]): Book[] => {
               copy.book_master?.id ??
               bookMasterId
           ),
+          indukNumber:
+            item.indukNumber ??
+            item.induk_number ??
+            copy.indukNumber ??
+            copy.induk_number ??
+            copy.bookMaster?.indukNumber ??
+            copy.bookMaster?.induk_number ??
+            copy.book_master?.indukNumber ??
+            copy.book_master?.induk_number ??
+            indukNumber,
           title:
             item.title ??
             copy.title ??
@@ -193,6 +216,7 @@ const normalizeBooks = (items: any[]): Book[] => {
         bookMasterId: Number(
           item.bookMasterId ?? item.book_master_id ?? bookMasterId
         ),
+        indukNumber,
         title,
         author,
         category,
@@ -227,6 +251,7 @@ export function Books() {
   const [showBookModal, setShowBookModal] = useState(false);
   const [editingMasterBook, setEditingMasterBook] = useState<Book | null>(null);
   const [bookForm, setBookForm] = useState({
+    indukNumber: '',
     title: '',
     author: '',
     category: '',
@@ -301,6 +326,7 @@ export function Books() {
     const keyword = searchTerm.toLowerCase();
 
     const matchesSearch =
+      book.indukNumber.toLowerCase().includes(keyword) ||
       book.title.toLowerCase().includes(keyword) ||
       book.author.toLowerCase().includes(keyword) ||
       book.number.toLowerCase().includes(keyword);
@@ -330,6 +356,7 @@ export function Books() {
     } else {
       const group: GroupedBook = {
         bookMasterId: book.bookMasterId,
+        indukNumber: book.indukNumber,
         title: book.title,
         author: book.author,
         category: book.category,
@@ -397,6 +424,7 @@ export function Books() {
   const openAddBook = () => {
     setEditingMasterBook(null);
     setBookForm({
+      indukNumber: '',
       title: '',
       author: '',
       category: '',
@@ -415,6 +443,7 @@ export function Books() {
 
     setEditingMasterBook(referenceBook);
     setBookForm({
+      indukNumber: referenceBook.indukNumber,
       title: referenceBook.title,
       author: referenceBook.author,
       category: referenceBook.category,
@@ -444,6 +473,7 @@ export function Books() {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
+              induk_number: bookForm.indukNumber,
               title: bookForm.title,
               author: bookForm.author,
               category: bookForm.category,
@@ -471,6 +501,7 @@ export function Books() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
+            induk_number: bookForm.indukNumber,
             title: bookForm.title,
             author: bookForm.author,
             category: bookForm.category,
@@ -741,7 +772,7 @@ export function Books() {
               type="text"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Cari buku berdasarkan judul, pengarang, atau nomor buku..."
+              placeholder="Cari buku berdasarkan no induk, judul, pengarang, atau nomor eksemplar..."
               className="w-full pl-11 pr-4 py-3 bg-accent/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
             />
           </div>
@@ -761,11 +792,11 @@ export function Books() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[850px]">
+          <table className="w-full min-w-[1000px]">
             <thead>
               <tr className="border-b-2 border-border">
                 <th className="text-left py-4 px-4 text-sm font-semibold text-foreground">
-                  No
+                  No Induk
                 </th>
                 <th className="text-left py-4 px-4 text-sm font-semibold text-foreground">
                   Judul Buku
@@ -810,9 +841,10 @@ export function Books() {
                   key={group.bookMasterId}
                   className="border-b border-border last:border-0 hover:bg-accent/30 transition-colors"
                 >
-                  <td className="py-4 px-4 text-muted-foreground">
-                    {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
-                  </td>
+
+                  <td className="py-4 px-4 font-mono text-sm text-primary font-medium">
+                    {group.indukNumber}
+                    </td>
 
                   <td className="py-4 px-4">
                     <span className="font-medium text-foreground">
@@ -947,6 +979,25 @@ export function Books() {
       >
         <form onSubmit={submitBookForm} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Nomor Buku Induk
+              </label>
+              <input
+                type="text"
+                value={bookForm.indukNumber}
+                onChange={(event) =>
+                  setBookForm({
+                    ...bookForm,
+                    indukNumber: event.target.value,
+                  })
+                }
+                className="w-full px-4 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-mono"
+                placeholder="Contoh: IND-0001"
+                required
+              />
+            </div>
+
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-foreground mb-2">
                 Judul Buku
@@ -1143,6 +1194,11 @@ export function Books() {
                 <h3 className="text-base font-bold text-foreground">
                   {syncedDetail.title}
                 </h3>
+
+                <p className="text-xs text-primary font-mono font-semibold mt-1">
+                  No Induk: {syncedDetail.indukNumber}
+                </p>
+
                 <p className="text-sm text-muted-foreground">
                   {syncedDetail.author}
                 </p>
@@ -1219,7 +1275,7 @@ export function Books() {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           <div>
                             <label className="block text-xs text-muted-foreground mb-1">
-                              No. Buku
+                              No. Eksemplar
                             </label>
                             <input
                               type="text"
@@ -1353,7 +1409,7 @@ export function Books() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div>
                         <label className="block text-xs text-muted-foreground mb-1">
-                          No. Buku
+                          No. Eksemplar
                         </label>
                         <input
                           type="text"

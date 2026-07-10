@@ -10,6 +10,7 @@ return new class extends Migration
     {
         Schema::create('book_masters', function (Blueprint $table) {
             $table->id();
+            $table->string('induk_number')->unique();
             $table->string('title');
             $table->string('author');
             $table->string('category');

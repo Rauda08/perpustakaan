@@ -56,6 +56,8 @@ class BaseApiController extends Controller
 
         return [
             'id' => $master->id,
+            'indukNumber' => $master->induk_number,
+            'induk_number' => $master->induk_number,
             'title' => $master->title,
             'author' => $master->author,
             'category' => $master->category,
@@ -77,6 +79,8 @@ class BaseApiController extends Controller
 
         return [
             'id' => $copy->id,
+            'indukNumber' => $master?->induk_number,
+            'induk_number' => $master?->induk_number,
             'bookId' => $copy->book_master_id,
             'bookMasterId' => $copy->book_master_id,
             'title' => $master?->title,

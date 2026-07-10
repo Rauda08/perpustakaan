@@ -18,7 +18,8 @@ class BookController extends BaseApiController
             $query->where(function ($q) use ($search) {
                 $q->where('number', 'like', "%{$search}%")
                     ->orWhereHas('bookMaster', function ($bm) use ($search) {
-                        $bm->where('title', 'like', "%{$search}%")
+                        $bm->where('induk_number', 'like', "%{$search}%")
+                            ->orWhere('title', 'like', "%{$search}%")
                             ->orWhere('author', 'like', "%{$search}%")
                             ->orWhere('category', 'like', "%{$search}%")
                             ->orWhere('shelf', 'like', "%{$search}%");
@@ -45,7 +46,8 @@ class BookController extends BaseApiController
 
         if ($search = $request->query('search')) {
             $query->where(function ($q) use ($search) {
-                $q->where('title', 'like', "%{$search}%")
+                $q->where('induk_number', 'like', "%{$search}%")
+                    ->orWhere('title', 'like', "%{$search}%")
                     ->orWhere('author', 'like', "%{$search}%")
                     ->orWhere('category', 'like', "%{$search}%")
                     ->orWhere('shelf', 'like', "%{$search}%");
@@ -60,6 +62,8 @@ class BookController extends BaseApiController
     public function store(Request $request)
     {
         $data = $request->validate([
+            'indukNumber' => ['required_without:induk_number', 'nullable', 'string', 'max:100', 'unique:book_masters,induk_number'],
+            'induk_number' => ['required_without:indukNumber', 'nullable', 'string', 'max:100', 'unique:book_masters,induk_number'],
             'title' => ['required', 'string', 'max:255'],
             'author' => ['required', 'string', 'max:255'],
             'category' => ['required', 'string', 'max:100'],
@@ -78,6 +82,7 @@ class BookController extends BaseApiController
 
         $master = DB::transaction(function () use ($data) {
             $master = BookMaster::create([
+                'induk_number' => $data['induk_number'] ?? $data['indukNumber'],
                 'title' => $data['title'],
                 'author' => $data['author'],
                 'category' => $data['category'],
@@ -116,6 +121,8 @@ class BookController extends BaseApiController
     public function updateMaster(Request $request, BookMaster $bookMaster)
     {
         $data = $request->validate([
+            'indukNumber' => ['required_without:induk_number', 'nullable', 'string', 'max:100', 'unique:book_masters,induk_number'],
+            'induk_number' => ['required_without:indukNumber', 'nullable', 'string', 'max:100', 'unique:book_masters,induk_number'],
             'title' => ['sometimes', 'required', 'string', 'max:255'],
             'author' => ['sometimes', 'required', 'string', 'max:255'],
             'category' => ['sometimes', 'required', 'string', 'max:100'],
@@ -125,6 +132,7 @@ class BookController extends BaseApiController
         ]);
 
         $bookMaster->update([
+            'induk_number' => $data['induk_number'] ?? $data['indukNumber'] ?? $bookMaster->induk_number,
             'title' => $data['title'] ?? $bookMaster->title,
             'author' => $data['author'] ?? $bookMaster->author,
             'category' => $data['category'] ?? $bookMaster->category,

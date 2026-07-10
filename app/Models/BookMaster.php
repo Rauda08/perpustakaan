@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class BookMaster extends Model
 {
     protected $fillable = [
+        'induk_number',
         'title',
         'author',
         'category',
