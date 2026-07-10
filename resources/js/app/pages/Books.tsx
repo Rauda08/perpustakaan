@@ -303,7 +303,6 @@ export function Books() {
     const matchesSearch =
       book.title.toLowerCase().includes(keyword) ||
       book.author.toLowerCase().includes(keyword) ||
-      book.category.toLowerCase().includes(keyword) ||
       book.number.toLowerCase().includes(keyword);
 
     const matchesCategory =
@@ -742,7 +741,7 @@ export function Books() {
               type="text"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Cari buku berdasarkan judul, pengarang, kategori, atau nomor buku..."
+              placeholder="Cari buku berdasarkan judul, pengarang, atau nomor buku..."
               className="w-full pl-11 pr-4 py-3 bg-accent/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
             />
           </div>

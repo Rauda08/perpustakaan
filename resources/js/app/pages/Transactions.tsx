@@ -462,6 +462,10 @@ export function Transactions({
     batchId: null,
   });
 
+  const [returnConfirmDialog, setReturnConfirmDialog] = useState({
+    isOpen: false,
+  });
+
   const [selectedBatchForReturn, setSelectedBatchForReturn] =
     useState<BatchItem | null>(null);
   const [returnBookStates, setReturnBookStates] = useState<
@@ -1215,7 +1219,7 @@ export function Transactions({
     setReturnModal(true);
   };
 
-  const handleReturnSubmit = async (event: FormEvent) => {
+  const handleReturnSubmit = (event: FormEvent) => {
     event.preventDefault();
 
     if (!selectedBatchForReturn) {
@@ -1246,6 +1250,22 @@ export function Transactions({
         return;
       }
     }
+
+    setReturnConfirmDialog({
+      isOpen: true,
+    });
+  };
+
+  const confirmReturnSubmit = async () => {
+    if (!selectedBatchForReturn) {
+      return;
+    }
+
+    const isLate = selectedBatchForReturn.status === 'Terlambat';
+
+    setReturnConfirmDialog({
+      isOpen: false,
+    });
 
     setIsSaving(true);
 
@@ -2491,6 +2511,7 @@ export function Transactions({
           setReturnModal(false);
           setSelectedBatchForReturn(null);
           setReturnBookStates({});
+          setReturnConfirmDialog({ isOpen: false });
         }}
         title="Pengembalian Buku"
       >
@@ -2727,7 +2748,7 @@ export function Transactions({
 
                             <div>
                               <label className="block text-sm font-medium text-foreground mb-2">
-                                Catatan untuk Buku Ini
+                                Catatan untuk Sanksi (Opsional)
                               </label>
 
                               <textarea
@@ -2757,6 +2778,7 @@ export function Transactions({
                 onClick={() => {
                   setReturnModal(false);
                   setReturnBookStates({});
+                  setReturnConfirmDialog({ isOpen: false });
                 }}
                 disabled={isSaving}
                 className="flex-1 px-6 py-3 border border-border rounded-lg hover:bg-accent transition-colors font-medium text-sm disabled:opacity-60 disabled:cursor-not-allowed"
@@ -2775,6 +2797,21 @@ export function Transactions({
           </form>
         )}
       </Modal>
+
+      <ConfirmDialog
+        isOpen={returnConfirmDialog.isOpen}
+        onClose={() => setReturnConfirmDialog({ isOpen: false })}
+        onConfirm={confirmReturnSubmit}
+        title="Konfirmasi Pengembalian"
+        message={
+          selectedBatchForReturn
+            ? `Yakin ingin memproses pengembalian ${selectedBatchForReturn.bookCount} buku atas nama ${selectedBatchForReturn.memberName}? Setelah diproses, status buku akan berubah menjadi dikembalikan.`
+            : 'Yakin ingin memproses pengembalian buku ini?'
+        }
+        confirmText={isSaving ? 'Memproses...' : 'Ya'}
+        cancelText="Batal"
+        type="info"
+      />
 
       <ConfirmDialog
         isOpen={deleteDialog.isOpen}
