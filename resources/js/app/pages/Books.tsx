@@ -795,7 +795,7 @@ export function Books() {
           <table className="w-full min-w-[1000px]">
             <thead>
               <tr className="border-b-2 border-border">
-                <th className="text-left py-4 px-4 text-sm font-semibold text-foreground">
+                <th className="text-left py-4 px-4 text-sm font-semibold text-foreground w-[150px] min-w-[150px]">
                   No Induk
                 </th>
                 <th className="text-left py-4 px-4 text-sm font-semibold text-foreground">
@@ -842,7 +842,7 @@ export function Books() {
                   className="border-b border-border last:border-0 hover:bg-accent/30 transition-colors"
                 >
 
-                  <td className="py-4 px-4 font-mono text-sm text-primary font-medium">
+                  <td className="py-4 px-4 font-mono text-sm text-primary font-medium w-[150px] min-w-[150px] whitespace-nowrap">
                     {group.indukNumber}
                     </td>
 
