@@ -1609,7 +1609,11 @@ export function Transactions({
             <thead>
               <tr className="border-b-2 border-border">
                 <th className="text-left py-4 px-4 text-sm font-semibold text-foreground">
-                  Nama Anggota
+                No Transaksi
+                </th>
+
+                <th className="text-left py-4 px-4 text-sm font-semibold text-foreground">
+                Nama Anggota
                 </th>
                 <th className="text-left py-4 px-4 text-sm font-semibold text-foreground">
                   Buku
@@ -1636,7 +1640,7 @@ export function Transactions({
               {paginatedBatches.length === 0 && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="py-12 text-center text-muted-foreground"
                   >
                     {isLoading
@@ -1653,6 +1657,9 @@ export function Transactions({
                   key={batch.batchId}
                   className="border-b border-border last:border-0 hover:bg-accent/30 transition-colors"
                 >
+                <td className="py-4 px-4 font-mono text-sm text-primary font-medium whitespace-nowrap">
+                {batch.batchId.replace('BATCH', 'TRX-')}
+                </td>
                   <td className="py-4 px-4">
                     <div>
                       <span className="font-medium text-foreground">
