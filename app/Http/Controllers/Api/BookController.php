@@ -119,29 +119,46 @@ class BookController extends BaseApiController
     }
 
     public function updateMaster(Request $request, BookMaster $bookMaster)
-    {
-        $data = $request->validate([
-            'indukNumber' => ['required_without:induk_number', 'nullable', 'string', 'max:100', 'unique:book_masters,induk_number'],
-            'induk_number' => ['required_without:indukNumber', 'nullable', 'string', 'max:100', 'unique:book_masters,induk_number'],
-            'title' => ['sometimes', 'required', 'string', 'max:255'],
-            'author' => ['sometimes', 'required', 'string', 'max:255'],
-            'category' => ['sometimes', 'required', 'string', 'max:100'],
-            'shelf' => ['sometimes', 'required', 'string', 'max:100'],
-            'publishYear' => ['sometimes', 'required', 'string', 'max:10'],
-            'publish_year' => ['sometimes', 'required', 'string', 'max:10'],
-        ]);
+{
+    $data = $request->validate([
+        'indukNumber' => [
+            'nullable',
+            'string',
+            'max:100',
+            Rule::unique('book_masters', 'induk_number')->ignore($bookMaster->id),
+        ],
+        'induk_number' => [
+            'nullable',
+            'string',
+            'max:100',
+            Rule::unique('book_masters', 'induk_number')->ignore($bookMaster->id),
+        ],
+        'title' => ['sometimes', 'required', 'string', 'max:255'],
+        'author' => ['sometimes', 'required', 'string', 'max:255'],
+        'category' => ['sometimes', 'required', 'string', 'max:100'],
+        'shelf' => ['sometimes', 'required', 'string', 'max:100'],
+        'publishYear' => ['sometimes', 'required', 'string', 'max:10'],
+        'publish_year' => ['sometimes', 'required', 'string', 'max:10'],
+    ]);
 
-        $bookMaster->update([
-            'induk_number' => $data['induk_number'] ?? $data['indukNumber'] ?? $bookMaster->induk_number,
-            'title' => $data['title'] ?? $bookMaster->title,
-            'author' => $data['author'] ?? $bookMaster->author,
-            'category' => $data['category'] ?? $bookMaster->category,
-            'shelf' => $data['shelf'] ?? $bookMaster->shelf,
-            'publish_year' => $data['publish_year'] ?? $data['publishYear'] ?? $bookMaster->publish_year,
-        ]);
+    $indukNumber = $data['induk_number']
+        ?? $data['indukNumber']
+        ?? $bookMaster->induk_number;
 
-        return $this->ok($this->bookMasterResource($bookMaster->refresh()->load('copies')), 'Data buku berhasil diperbarui');
-    }
+    $bookMaster->update([
+        'induk_number' => $indukNumber,
+        'title' => $data['title'] ?? $bookMaster->title,
+        'author' => $data['author'] ?? $bookMaster->author,
+        'category' => $data['category'] ?? $bookMaster->category,
+        'shelf' => $data['shelf'] ?? $bookMaster->shelf,
+        'publish_year' => $data['publish_year'] ?? $data['publishYear'] ?? $bookMaster->publish_year,
+    ]);
+
+    return $this->ok(
+        $this->bookMasterResource($bookMaster->refresh()->load('copies')),
+        'Data buku berhasil diperbarui'
+    );
+}
 
     public function destroyMaster(BookMaster $bookMaster)
     {
