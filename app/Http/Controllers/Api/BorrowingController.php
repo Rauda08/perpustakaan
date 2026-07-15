@@ -219,57 +219,74 @@ class BorrowingController extends BaseApiController
     }
 
     public function returnBook(Request $request, Borrowing $borrowing)
-    {
-        if ($borrowing->status === 'Dikembalikan') {
-            return $this->fail('Buku sudah dikembalikan sebelumnya.', 409);
-        }
+{
+    if ($borrowing->status === 'Dikembalikan') {
+        return $this->fail('Buku sudah dikembalikan sebelumnya.', 409);
+    }
 
-        $data = $request->validate([
-            'returnDate' => ['nullable', 'date'],
-            'return_date' => ['nullable', 'date'],
-            'returnTime' => ['nullable', 'string', 'max:20'],
-            'return_time' => ['nullable', 'string', 'max:20'],
-            'withPenalty' => ['nullable', 'boolean'],
-            'reason' => ['nullable', Rule::in(['Terlambat', 'Rusak', 'Hilang'])],
-            'penaltyType' => ['nullable', Rule::in(['Buku Donasi', 'Buku Pengganti'])],
-            'penalty_type' => ['nullable', Rule::in(['Buku Donasi', 'Buku Pengganti'])],
-            'penaltyBookTitle' => ['nullable', 'string', 'max:255'],
-            'penalty_book_title' => ['nullable', 'string', 'max:255'],
-            'notes' => ['nullable', 'string'],
+    $data = $request->validate([
+        'returnDate' => ['nullable', 'date'],
+        'return_date' => ['nullable', 'date'],
+        'returnTime' => ['nullable', 'string', 'max:20'],
+        'return_time' => ['nullable', 'string', 'max:20'],
+        'withPenalty' => ['nullable', 'boolean'],
+        'reason' => ['nullable', Rule::in(['Terlambat', 'Rusak', 'Hilang'])],
+        'penaltyType' => ['nullable', Rule::in(['Buku Donasi', 'Buku Pengganti'])],
+        'penalty_type' => ['nullable', Rule::in(['Buku Donasi', 'Buku Pengganti'])],
+        'penaltyBookTitle' => ['nullable', 'string', 'max:255'],
+        'penalty_book_title' => ['nullable', 'string', 'max:255'],
+        'notes' => ['nullable', 'string'],
+    ]);
+
+    $borrowing = DB::transaction(function () use ($borrowing, $data) {
+        $returnDate = $data['return_date'] ?? $data['returnDate'] ?? now()->toDateString();
+        $reason = $data['reason'] ?? null;
+
+        /*
+         * Status eksemplar setelah pengembalian:
+         * - Bagus / Terlambat saja = Tersedia
+         * - Rusak = Rusak
+         * - Hilang = Hilang
+         */
+        $bookCopyStatus = match ($reason) {
+            'Rusak' => 'Rusak',
+            'Hilang' => 'Hilang',
+            default => 'Tersedia',
+        };
+
+        $borrowing->update([
+            'return_date' => $returnDate,
+            'return_time' => $data['return_time'] ?? $data['returnTime'] ?? $borrowing->return_time,
+            'status' => 'Dikembalikan',
         ]);
 
-        $borrowing = DB::transaction(function () use ($borrowing, $data) {
-            $returnDate = $data['return_date'] ?? $data['returnDate'] ?? now()->toDateString();
-            $borrowing->update([
-                'return_date' => $returnDate,
-                'return_time' => $data['return_time'] ?? $data['returnTime'] ?? $borrowing->return_time,
-                'status' => 'Dikembalikan',
-            ]);
+        $borrowing->bookCopy()->update([
+            'status' => $bookCopyStatus,
+        ]);
 
-            $borrowing->bookCopy()->update(['status' => 'Tersedia']);
+        $hasPenalty = ($data['withPenalty'] ?? false) || ! empty($reason);
 
-            $hasPenalty = ($data['withPenalty'] ?? false) || ! empty($data['reason']);
-            if ($hasPenalty) {
-                $borrowing->penalty()->updateOrCreate(
-                    ['borrowing_id' => $borrowing->id],
-                    [
-                        'member_id' => $borrowing->member_id,
-                        'book_copy_id' => $borrowing->book_copy_id,
-                        'loan_type' => $borrowing->loan_type,
-                        'date' => $returnDate,
-                        'reason' => $data['reason'] ?? 'Terlambat',
-                        'penalty_type' => $data['penalty_type'] ?? $data['penaltyType'] ?? 'Buku Donasi',
-                        'penalty_book_title' => $data['penalty_book_title'] ?? $data['penaltyBookTitle'] ?? '-',
-                        'notes' => $data['notes'] ?? null,
-                    ]
-                );
-            }
+        if ($hasPenalty) {
+            $borrowing->penalty()->updateOrCreate(
+                ['borrowing_id' => $borrowing->id],
+                [
+                    'member_id' => $borrowing->member_id,
+                    'book_copy_id' => $borrowing->book_copy_id,
+                    'loan_type' => $borrowing->loan_type,
+                    'date' => $returnDate,
+                    'reason' => $reason ?? 'Terlambat',
+                    'penalty_type' => $data['penalty_type'] ?? $data['penaltyType'] ?? 'Buku Donasi',
+                    'penalty_book_title' => $data['penalty_book_title'] ?? $data['penaltyBookTitle'] ?? '-',
+                    'notes' => $data['notes'] ?? null,
+                ]
+            );
+        }
 
-            return $borrowing->refresh()->load(['member', 'bookCopy.bookMaster', 'penalty']);
-        });
+        return $borrowing->refresh()->load(['member', 'bookCopy.bookMaster', 'penalty']);
+    });
 
-        return $this->ok($this->borrowingResource($borrowing), 'Pengembalian berhasil diproses');
-    }
+    return $this->ok($this->borrowingResource($borrowing), 'Pengembalian berhasil diproses');
+}
 
     public function destroy(Borrowing $borrowing)
     {

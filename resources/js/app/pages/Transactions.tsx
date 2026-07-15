@@ -757,14 +757,31 @@ export function Transactions({
   };
 
   const handleBorrowDateChange = (date: string) => {
-    setFormData({
-      ...formData,
-      borrowDate: date,
-      returnDate: calculateReturnDate(date, formData.borrowType),
+  const today = todayDate();
+
+  if (date < today) {
+    setToast({
+      message: 'Tanggal peminjaman tidak boleh sebelum hari ini.',
+      type: 'error',
     });
-  };
+    return;
+  }
+
+  setFormData({
+    ...formData,
+    borrowDate: date,
+    returnDate: calculateReturnDate(date, formData.borrowType),
+  });
+};
 
   const validateBorrowing = (selectedBooks: Book[]) => {
+    if (formData.borrowDate < todayDate()) {
+  setToast({
+    message: 'Tanggal peminjaman tidak boleh sebelum hari ini.',
+    type: 'error',
+  });
+  return false;
+}
     if (!selectedMember) {
       setToast({ message: 'Pilih anggota terlebih dahulu!', type: 'error' });
       return false;
@@ -2226,11 +2243,12 @@ export function Transactions({
                         type="date"
                         value={formData.borrowDate}
                         onChange={(event) =>
-                          handleBorrowDateChange(event.target.value)
+                            handleBorrowDateChange(event.target.value)
                         }
+                        min={todayDate()}
                         className="w-full px-4 py-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                         required
-                      />
+                        />
                     </div>
 
                     <div>
