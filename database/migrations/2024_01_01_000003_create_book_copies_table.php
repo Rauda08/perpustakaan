@@ -12,7 +12,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('book_master_id')->constrained('book_masters')->onDelete('restrict');
             $table->string('number')->unique(); // Nomor eksemplar: BK001, BK002, dst
-            $table->enum('status', ['Tersedia', 'Dipinjam'])->default('Tersedia');
+            $table->enum('status', ['Tersedia', 'Dipinjam', 'Rusak', 'Hilang'])->default('Tersedia');
             $table->string('acquisition_year');
             $table->timestamps();
         });
